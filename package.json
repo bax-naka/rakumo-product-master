@@ -1,0 +1,10 @@
+{
+  "name": "rakumo-product-master",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node test/negative.js",
+    "verify": "node test/run.js verify"
+  },
+  "engines": { "node": ">=24" }
+}

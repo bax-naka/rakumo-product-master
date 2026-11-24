@@ -1,0 +1,9 @@
+# 実データ・IDを含むものはGitに登録しない
+fixtures/
+gas-devops.config.json
+.gas-devops/
+.clasp.json
+.clasprc.json
+*credentials*.json
+client*.json
+node_modules/

@@ -1,0 +1,11 @@
+{
+  "projects": {
+    "product-master-stepb": {
+      "scriptId": "REPLACE_WITH_SCRIPT_ID",
+      "sourceDir": "./gas",
+      "environment": "staging",
+      "deployments": {},
+      "notifications": { "enabled": false }
+    }
+  }
+}
