@@ -2,7 +2,8 @@
  * 実行用の関数（エディタの関数選択から実行する）
  *   1. pmCheckSetup                 … 設定と読取権限の確認
  *   2. pmPreviewUpdates             … 処理候補の判定と更新プレビュー（書き込みなし）
- *   3. pmVerifyAgainstTestLedger    … テスト台帳の期待結果との突き合わせ
+ *   3. pmVerifyAgainstTestLedger    … テスト台帳の期待結果との突き合わせ（反映後は処理台帳と管理マスターで確認）
+ *   4. pmApplyUpdates               … 管理マスター・処理台帳への書き込み（WRITE_ENABLED=true のときだけ）
  */
 function pmCheckSetup() {
   var props = pmProps_();
@@ -16,7 +17,7 @@ function pmCheckSetup() {
   pmLog_('対象Form: ' + JSON.stringify(m.forms));
   pmLog_('項目マッピング: ' + Object.keys(m.mapping).map(function (k) { return k + '=' + Object.keys(m.mapping[k]).length + 'キー'; }).join(', '));
   pmLog_('処理台帳: ' + (m.hasLedgerTab ? Object.keys(m.ledgerIds).length + '件' : 'タブなし（全件未処理として扱う）') + ' / テスト台帳: ' + m.tests.length + '件');
-  pmLog_('開始基準: ' + props[PM.PROP.START_AT]);
+  pmLog_('開始基準: ' + props[PM.PROP.START_AT] + ' / 書込み: ' + (props[PM.PROP.WRITE_ENABLED] ? '有効' : '無効（WRITE_ENABLED≠true）'));
   var j = pmJudgeAll(f2r, m, { startAt: props[PM.PROP.START_AT] });
   j.warnings.forEach(function (w) { pmLog_('[警告] ' + w); });
   pmLog_('設定確認 完了（警告 ' + j.warnings.length + '件、判定対象 ' + j.results.length + '件）');
@@ -51,6 +52,19 @@ function pmVerifyAgainstTestLedger() {
   pmLog_('結果: ' + (v.length - ng) + '/' + v.length + ' PASS');
   if (!v.length) pmLog_('テスト台帳が空です');
   return v;
+}
+
+function pmApplyUpdates() {
+  var props = pmProps_();
+  if (!props[PM.PROP.WRITE_ENABLED]) {
+    pmLog_('WRITE_ENABLED が true ではないため書き込みません。プレビューだけ表示します。');
+    return pmPreviewUpdates();
+  }
+  pmLog_('=== 書込み実行 ===');
+  var res = pmApplyRun_(props);
+  res.log.forEach(pmLog_);
+  pmLog_('完了。結果は処理台帳タブで確認できます。');
+  return res;
 }
 
 function pmRun_() {

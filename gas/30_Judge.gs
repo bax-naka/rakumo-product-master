@@ -70,6 +70,11 @@ function pmNewState_(master) {
     if (!m) throw new Error('管理コードの形式が不正: ' + id);
     maxNo = Math.max(maxNo, Number(m[1]));
   });
+  // 処理台帳に記録済みの管理コード（保留・エラー・途中停止を含む）も再利用しない
+  Object.keys(master.ledgerIds || {}).forEach(function (f) {
+    var m = new RegExp('^' + PM.MGMT_ID_PREFIX + '(\\d+)$').exec(String(master.ledgerIds[f].management_id || '').trim());
+    if (m) maxNo = Math.max(maxNo, Number(m[1]));
+  });
   return { products: products, models: models, nextNo: maxNo + 1 };
 }
 function pmMgmtId_(n) { return PM.MGMT_ID_PREFIX + pmPad(n, PM.MGMT_ID_DIGITS); }
@@ -226,6 +231,22 @@ function pmVerify(judged, master) {
   return master.tests.map(function (t) {
     var fid = pmId(t.flow_id), r = byFlow[fid], fails = [];
     var expect = String(t['期待結果'] || '').trim();
+    var L = master.ledgerIds[fid];
+    if (!r && L) {
+      // 反映後：処理台帳の段階と、現在の管理マスターの値で確認する
+      var wantStage = expect === '反映' ? PM.STAGE.APPLIED : expect === '保留' ? PM.STAGE.HOLD : '?';
+      if (L.stage !== wantStage) fails.push('処理台帳の段階 ' + L.stage + '（期待 ' + wantStage + '）');
+      if (expect === '反映') {
+        var p = master.products[String(L.management_id).trim()];
+        if (!p) fails.push('管理マスターに ' + L.management_id + ' がない');
+        else String(t['期待差分'] || '').split(';').forEach(function (kv) {
+          if (!kv.trim()) return;
+          var i = kv.indexOf('='), col = kv.slice(0, i).trim(), val = kv.slice(i + 1).trim();
+          if (p[col] !== val) fails.push('管理マスター ' + col + '="' + p[col] + '"（期待 "' + val + '"）');
+        });
+      }
+      return { application_number: t.application_number, flow_id: fid, ok: !fails.length, fails: fails, result: { decision: '処理台帳: ' + L.stage } };
+    }
     if (!r) fails.push('判定対象になっていない（' + (exByFlow[fid] || '公開データにない') + '）');
     else {
       if (r.decision !== expect) fails.push('判定 ' + r.decision + '（期待 ' + expect + '）');

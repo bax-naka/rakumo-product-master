@@ -7,7 +7,8 @@ var PM = {
   PROP: {
     F2R_ID: 'F2R_SPREADSHEET_ID',          // F-2R公開Sheets
     MASTER_ID: 'MASTER_SPREADSHEET_ID',    // 管理用ブック（管理マスター・設定タブ）
-    START_AT: 'PROCESS_START_AT'           // これより前に決裁されたFlowは対象外（テスト台帳記載分を除く）
+    START_AT: 'PROCESS_START_AT',          // これより前に決裁されたFlowは対象外（テスト台帳記載分を除く）
+    WRITE_ENABLED: 'WRITE_ENABLED'         // "true" のときだけ管理マスター・処理台帳へ書き込む
   },
   F2R_DATASETS: ['categories', 'forms', 'flows', 'items', 'route', 'history'],
   F2R_REQUIRED: {
@@ -34,6 +35,12 @@ var PM = {
   EDITABLE_KEYS: ['model', 'status', 'category', 'destination', 'customer', 'product_code', 'unit'],
   CODE_KEYS: ['status', 'category', 'destination', 'customer'],
   TARGET_STATUSES: ['2', '5'],
+  LEDGER_HEADER: ['flow_id', 'application_number', 'form_key', 'status', 'decided_at', 'stage', 'decision', 'management_id',
+                  'reasons', 'before_json', 'after_json', 'f2r_generation', 'created_at', 'updated_at', 'lookup_status'],
+  STAGE: { PROCESSING: '処理中', APPLIED: 'マスター反映済み', HOLD: '保留', ERROR: 'エラー' },
+  BACKUP_PREFIX: 'bk_管理マスター_',
+  BACKUP_KEEP: 5,
+  LOCK_WAIT_MS: 30000,
   MGMT_ID_PREFIX: 'PD',
   MGMT_ID_DIGITS: 5
 };
@@ -46,6 +53,8 @@ function pmProps_() {
     if (!v) throw new Error('Script Property 未設定: ' + k);
     out[k] = v;
   });
+  out[PM.PROP.WRITE_ENABLED] = String(p.getProperty(PM.PROP.WRITE_ENABLED) || '').trim().toLowerCase() === 'true';
+  if (out[PM.PROP.F2R_ID] === out[PM.PROP.MASTER_ID]) throw new Error('F-2R公開Sheetsと管理用ブックに同じIDが設定されている');
   if (isNaN(Date.parse(out[PM.PROP.START_AT]))) throw new Error(PM.PROP.START_AT + ' が日時として解釈できない: ' + out[PM.PROP.START_AT]);
   return out;
 }

@@ -3,7 +3,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node test/negative.js",
+    "test": "node test/negative.js && node test/apply.js",
     "verify": "node test/run.js verify"
   },
   "engines": { "node": ">=24" }
