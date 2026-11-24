@@ -22,6 +22,15 @@ rakumoワークフローの製品マスター「新規登録」「変更申請�
 - 管理コードは管理マスターと処理台帳の最大値+1。番号は再利用しない。
 - 反映がある回だけ、管理マスターを非表示タブ `bk_管理マスター_日時` に複製する（最新5つを保持）。
 
+### Step D（準備：rakumo LookupData の読取）
+
+- API仕様: https://sites.google.com/gigei.jp/rakumoapi （ワークフローAPI実装ガイド・認証方式）
+- `pmCheckLookupData` は LookupData LIST/GET だけを呼び、テスト用ルックアップ2件のID・行数・列・`isBuilding`・`lastRefreshed` を表示する（REFRESHは呼ばない）。
+- 認証は RWS（HMAC-SHA1、Date±15分）。429/50x は指数バックオフで最大3回、40x は再試行しない。
+- APIキーはF-2Rと同じアカウント（Workflow管理者以上）のものを使い、GASの**ユーザープロパティ**に保存する。設定はスクリプトプロパティに一時的に `RAKUMO_API_KEY`・`RAKUMO_API_SECRET` を入れて `pmMoveRakumoKeyToUserProperties` を実行（移したあと元は削除される）。
+- **キーを再発行したときは、F-2R（Windows）とこのGASの2か所を更新する。**
+- 追加のスクリプトプロパティ：`LOOKUP_ACTIVE_SPREADSHEET_ID`（製品マスター(仮)）、`LOOKUP_INACTIVE_SPREADSHEET_ID`（製品マスター(削除)）。
+
 ## 構成
 
 | パス | 内容 |

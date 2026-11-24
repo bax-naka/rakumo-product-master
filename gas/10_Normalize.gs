@@ -1,6 +1,6 @@
-/** rakumoのルックアップ取込規則：全角英数字記号→半角、半角カタカナ→全角 */
+/** rakumoのルックアップ取込規則：全角英数字・記号・スペース→半角、半角カタカナ→全角 */
 function pmRakumoNorm(s) {
-  s = String(s == null ? '' : s);
+  s = String(s == null ? '' : s).replace(/\u3000/g, ' ');
   s = s.replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
   return s.replace(/[｡-ﾟ]+/g, function (m) { return m.normalize('NFKC'); });
 }

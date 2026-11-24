@@ -80,8 +80,17 @@ module.exports = function load(books, props, opts = {}) {
     },
     LockService: { getScriptLock: () => ({ tryLock: () => (opts.lockFails ? false : true), releaseLock: () => {} }) },
     Utilities: { formatDate: (d, tz, f) => { clock += 1000; const t = new Date(clock + 9 * 3600e3).toISOString();
-      return f.indexOf('yyyyMMdd_HHmmss') >= 0 ? t.slice(0, 19).replace(/[-:]/g, '').replace('T', '_') : t.slice(0, 19) + '+09:00'; } },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null }) },
+      return f.indexOf('yyyyMMdd_HHmmss') >= 0 ? t.slice(0, 19).replace(/[-:]/g, '').replace('T', '_') : t.slice(0, 19) + '+09:00'; },
+      MacAlgorithm: { HMAC_SHA_1: 'sha1' },
+      computeHmacSignature: (alg, msg, key) => Array.from(require('crypto').createHmac(alg, Buffer.from(key, 'utf8')).update(Buffer.from(msg, 'utf8')).digest()),
+      base64Encode: (bytes) => Buffer.from(bytes.map(b => b & 255)).toString('base64'),
+      sleep: (ms) => { stats.slept = (stats.slept || 0) + ms; } },
+    UrlFetchApp: { fetch: (url, o) => { stats.fetch = (stats.fetch || []); stats.fetch.push({ url, o });
+      if (!opts.fetch) throw new Error('TEST: 外部通信は未許可'); const r = opts.fetch(url, o);
+      return { getResponseCode: () => r.code, getContentText: () => (typeof r.body === 'string' ? r.body : JSON.stringify(r.body)) }; } },
+    PropertiesService: {
+      getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: (k) => { delete props[k]; } }),
+      getUserProperties: () => { const u = opts.userProps || (opts.userProps = {}); return { getProperty: (k) => u[k] || null, setProperty: (k, v) => { u[k] = v; }, deleteProperty: (k) => { delete u[k]; } }; } },
   };
   vm.createContext(ctx);
   const dir = path.join(__dirname, '..', 'gas');
