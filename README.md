@@ -5,6 +5,7 @@ rakumoワークフローの製品マスター「新規登録」「変更申請�
 ## 現在の段階：Step B（読取・判定のみ）
 
 - 書き込み処理は含まない。`appsscript.json` の権限は `spreadsheets.readonly` のみ。
+- 読取は Sheets API 拡張サービス（`Sheets.Spreadsheets.Values.batchGet`）で行う。`SpreadsheetApp.openById` は書込みを含む権限を要求するため使わない。
 - F-2R公開Sheetsを `control` の有効スロットから読み、世代・件数・読取前後の `control` 一致を確認する。
 - 対象Form × status 2/5 × 処理台帳未登録 × 開始基準以降（テスト台帳記載分は例外）を候補とし、決裁日時順に判定する。
 - 判定は仮想の管理マスターに順次適用する（同一製品への連続変更・型番重複を検出するため）。実際の管理マスターは変更しない。

@@ -1,8 +1,28 @@
-/** シートを {header, records} で読む（表示値＝文字列） */
-function pmReadTable_(ss, name, optional) {
-  var sh = ss.getSheetByName(name);
-  if (!sh) { if (optional) return null; throw new Error('タブがない: ' + name); }
-  var v = sh.getDataRange().getDisplayValues();
+/**
+ * スプレッドシートの読取は Sheets API（拡張サービス）で行う。
+ * SpreadsheetApp の openById は spreadsheets（書込みを含む）権限を要求するため使わない。
+ * 権限は spreadsheets.readonly のみ。
+ */
+function pmOpenBook_(id) {
+  var meta = Sheets.Spreadsheets.get(id, { fields: 'sheets.properties.title' });
+  var titles = (meta.sheets || []).map(function (s) { return s.properties.title; });
+  return { id: id, titles: titles, cache: {} };
+}
+function pmQuote_(name) { return "'" + String(name).replace(/'/g, "''") + "'"; }
+/** 複数タブを1回のAPI呼び出しでまとめて読む（表示値＝文字列） */
+function pmFetch_(book, names) {
+  var want = names.filter(function (n) { return book.titles.indexOf(n) >= 0; });
+  if (!want.length) return;
+  var res = Sheets.Spreadsheets.Values.batchGet(book.id, { ranges: want.map(pmQuote_), valueRenderOption: 'FORMATTED_VALUE', majorDimension: 'ROWS' });
+  var vr = res.valueRanges || [];
+  if (vr.length !== want.length) throw new Error('読取結果の件数が要求と一致しない');
+  want.forEach(function (n, i) { book.cache[n] = (vr[i].values || []).map(function (r) { return r.map(function (c) { return c == null ? '' : String(c); }); }); });
+}
+/** タブを {header, records} で読む。末尾の空セル・空行はAPIが省くので列数をヘッダーに合わせる */
+function pmReadTable_(book, name, optional) {
+  if (book.titles.indexOf(name) < 0) { if (optional) return null; throw new Error('タブがない: ' + name); }
+  if (!book.cache[name]) pmFetch_(book, [name]);
+  var v = book.cache[name];
   if (!v.length || !v[0].some(function (c) { return c !== ''; })) {
     if (optional) return { header: [], records: [] };
     throw new Error('ヘッダーがない: ' + name);
@@ -11,7 +31,8 @@ function pmReadTable_(ss, name, optional) {
   var seen = {};
   header.forEach(function (h) { if (h && seen[h]) throw new Error('ヘッダー重複: ' + name + ' / ' + h); seen[h] = true; });
   var records = v.slice(1).filter(function (r) { return r.some(function (c) { return c !== ''; }); }).map(function (r) {
-    var o = {}; header.forEach(function (h, i) { if (h) o[h] = String(r[i]); }); return o;
+    if (r.length > header.length && r.slice(header.length).some(function (c) { return c !== ''; })) throw new Error(name + ' にヘッダー範囲外の値がある');
+    var o = {}; header.forEach(function (h, i) { if (h) o[h] = i < r.length ? String(r[i]) : ''; }); return o;
   });
   return { header: header, records: records };
 }
@@ -21,19 +42,21 @@ function pmRequireCols_(table, name, cols) {
   if (miss.length) throw new Error(name + ' に必要な列がない: ' + miss.join(', '));
 }
 
-function pmReadControl_(ss) {
-  var t = pmReadTable_(ss, 'control');
+function pmReadControl_(book) {
+  delete book.cache['control'];
+  var t = pmReadTable_(book, 'control');
   if (t.records.length !== 1) throw new Error('control の行数が1ではない: ' + t.records.length);
   return t.records[0];
 }
 
 /** F-2R公開Sheetsを、controlが示す有効スロットから整合確認つきで読む */
 function pmReadF2r_(ssId) {
-  var ss = SpreadsheetApp.openById(ssId);
+  var ss = pmOpenBook_(ssId);
   var c1 = pmReadControl_(ss);
   var slot = c1.active_slot;
   if (slot !== 'A' && slot !== 'B') throw new Error('active_slot が不正: ' + slot);
   var data = {}, problems = [];
+  pmFetch_(ss, PM.F2R_DATASETS.map(function (ds) { return ds + '_' + slot; }));   // 6タブを1回で取得
   PM.F2R_DATASETS.forEach(function (ds) {
     var name = ds + '_' + slot, t = pmReadTable_(ss, name);
     if (PM.F2R_REQUIRED[ds]) pmRequireCols_(t, name, PM.F2R_REQUIRED[ds]);
@@ -51,7 +74,8 @@ function pmReadF2r_(ssId) {
 
 /** 管理用ブック（管理マスターと設定タブ）を読む */
 function pmReadMaster_(ssId) {
-  var ss = SpreadsheetApp.openById(ssId);
+  var ss = pmOpenBook_(ssId);
+  pmFetch_(ss, [PM.TAB.master, PM.TAB.status, PM.TAB.category, PM.TAB.forms, PM.TAB.mapping, PM.TAB.testLedger, PM.TAB.ledger]);
   var m = pmReadTable_(ss, PM.TAB.master);
   pmRequireCols_(m, PM.TAB.master, PM.COLUMNS);
   var products = {};
