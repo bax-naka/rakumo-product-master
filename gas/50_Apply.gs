@@ -24,7 +24,7 @@ function pmApplyRun_(props) {
     var master = pmReadMaster_(masterId);
     var judged = pmJudgeAll(f2r, master, { startAt: props[PM.PROP.START_AT] });
     judged.warnings.forEach(function (w) { log.push('[警告] ' + w); });
-    if (!judged.results.length) { log.push('処理対象なし'); return { log: log, judged: judged }; }
+    if (!judged.results.length) log.push('処理対象なし');
 
     if (judged.results.some(function (r) { return r.decision === '反映'; })) log.push('バックアップ: ' + pmBackup_(book));
 
@@ -54,6 +54,10 @@ function pmApplyRun_(props) {
         ? '（' + r.diff.map(function (d) { return d.column + ' "' + d.before + '"→"' + d.after + '"'; }).join(', ') + '）'
         : '（新規追加: ' + r.after['型番'] + '）'));
     });
+    // Step D：公開ファイルの再生成と rakumo 再取込（設定があるときだけ）
+    var sp = PropertiesService.getScriptProperties();
+    if (sp.getProperty(PM_RAKUMO.LOOKUP_PROPS.active) && sp.getProperty(PM_RAKUMO.LOOKUP_PROPS.inactive)) pmPublishRun_(props, book, log);
+    else log.push('公開ファイルの設定（LOOKUP_*_SPREADSHEET_ID）がないため公開は行わない');
     return { log: log, judged: judged };
   } finally {
     lock.releaseLock();

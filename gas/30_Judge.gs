@@ -234,8 +234,8 @@ function pmVerify(judged, master) {
     var L = master.ledgerIds[fid];
     if (!r && L) {
       // 反映後：処理台帳の段階と、現在の管理マスターの値で確認する
-      var wantStage = expect === '反映' ? PM.STAGE.APPLIED : expect === '保留' ? PM.STAGE.HOLD : '?';
-      if (L.stage !== wantStage) fails.push('処理台帳の段階 ' + L.stage + '（期待 ' + wantStage + '）');
+      var wantStages = expect === '反映' ? [PM.STAGE.APPLIED, PM.STAGE.DONE] : expect === '保留' ? [PM.STAGE.HOLD] : [];
+      if (wantStages.indexOf(L.stage) < 0) fails.push('処理台帳の段階 ' + L.stage + '（期待 ' + wantStages.join('または') + '）');
       if (expect === '反映') {
         var p = master.products[String(L.management_id).trim()];
         if (!p) fails.push('管理マスターに ' + L.management_id + ' がない');

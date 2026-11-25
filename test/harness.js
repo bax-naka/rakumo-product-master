@@ -59,6 +59,8 @@ module.exports = function load(books, props, opts = {}) {
         getLastRow: () => { const d = data(); let n = d.length; while (n && !d[n - 1].some(v => v !== '' && v != null)) n--; return n; },
         getLastColumn: () => Math.max(0, ...data().map(r => { let n = r.length; while (n && (r[n - 1] === '' || r[n - 1] == null)) n--; return n; })),
         getRange: range,
+        getDataRange: () => { const d = data(); const n = d.length, c = Math.max(0, ...d.map(r => r.length)); return range(1, 1, Math.max(n, 1), Math.max(c, 1)); },
+        clearContents: () => { data().splice(0); fx() && Object.keys(fx()).forEach(k => delete fx()[k]); return null; },
         setFrozenRows: () => {},
         hideSheet: () => { m.hidden[st.name] = true; },
         copyTo: (bk) => { let n = 'Copy of ' + st.name; b[n] = data().map(r => r.slice()); return sheet(n); },

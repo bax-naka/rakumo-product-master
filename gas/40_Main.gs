@@ -4,6 +4,9 @@
  *   2. pmPreviewUpdates             … 処理候補の判定と更新プレビュー（書き込みなし）
  *   3. pmVerifyAgainstTestLedger    … テスト台帳の期待結果との突き合わせ（反映後は処理台帳と管理マスターで確認）
  *   4. pmApplyUpdates               … 管理マスター・処理台帳への書き込み（WRITE_ENABLED=true のときだけ）
+ *                                      続けて公開ファイル再生成、LOOKUP_REFRESH_ENABLED=true なら rakumo 再取込
+ *   5. pmPublishLookups             … 公開ファイル再生成・再取込だけを実行（WRITE_ENABLED=true のときだけ）
+ *   rakumo API: 60_Rakumo.gs の pmMoveRakumoKeyToUserProperties / pmCheckLookupData
  */
 function pmCheckSetup() {
   var props = pmProps_();

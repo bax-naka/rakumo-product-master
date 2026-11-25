@@ -37,7 +37,7 @@ var PM = {
   TARGET_STATUSES: ['2', '5'],
   LEDGER_HEADER: ['flow_id', 'application_number', 'form_key', 'status', 'decided_at', 'stage', 'decision', 'management_id',
                   'reasons', 'before_json', 'after_json', 'f2r_generation', 'created_at', 'updated_at', 'lookup_status'],
-  STAGE: { PROCESSING: '処理中', APPLIED: 'マスター反映済み', HOLD: '保留', ERROR: 'エラー' },
+  STAGE: { PROCESSING: '処理中', APPLIED: 'マスター反映済み', DONE: '完了', HOLD: '保留', ERROR: 'エラー' },
   BACKUP_PREFIX: 'bk_管理マスター_',
   BACKUP_KEEP: 5,
   LOCK_WAIT_MS: 30000,
