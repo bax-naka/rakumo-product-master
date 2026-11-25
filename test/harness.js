@@ -90,6 +90,10 @@ module.exports = function load(books, props, opts = {}) {
     UrlFetchApp: { fetch: (url, o) => { stats.fetch = (stats.fetch || []); stats.fetch.push({ url, o });
       if (!opts.fetch) throw new Error('TEST: 外部通信は未許可'); const r = opts.fetch(url, o);
       return { getResponseCode: () => r.code, getContentText: () => (typeof r.body === 'string' ? r.body : JSON.stringify(r.body)) }; } },
+    MailApp: { sendEmail: (m) => { (stats.mails = stats.mails || []).push(m); } },
+    ScriptApp: (() => { const tr = opts.triggers || (opts.triggers = []); return {
+      newTrigger: (h) => ({ timeBased: () => ({ everyMinutes: (n) => ({ create: () => { const t = { h, n, getHandlerFunction: () => h }; tr.push(t); return t; } }) }) }),
+      getProjectTriggers: () => tr.slice(), deleteTrigger: (t) => { tr.splice(tr.indexOf(t), 1); } }; })(),
     PropertiesService: {
       getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: (k) => { delete props[k]; } }),
       getUserProperties: () => { const u = opts.userProps || (opts.userProps = {}); return { getProperty: (k) => u[k] || null, setProperty: (k, v) => { u[k] = v; }, deleteProperty: (k) => { delete u[k]; } }; } },

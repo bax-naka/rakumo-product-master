@@ -49,8 +49,19 @@ function pmReadControl_(book) {
   return t.records[0];
 }
 
-/** F-2R公開Sheetsを、controlが示す有効スロットから整合確認つきで読む */
+/** F-2R公開Sheetsを読む。公開の切替と重なって control が変わった場合だけ、少し待って最大3回まで読み直す */
 function pmReadF2r_(ssId) {
+  for (var i = 0; ; i++) {
+    try { return pmReadF2rOnce_(ssId); }
+    catch (e) {
+      if (i >= 2 || !/control が変わった/.test(String(e.message))) throw e;
+      Utilities.sleep(10000);
+    }
+  }
+}
+
+/** F-2R公開Sheetsを、controlが示す有効スロットから整合確認つきで読む（1回分） */
+function pmReadF2rOnce_(ssId) {
   var ss = pmOpenBook_(ssId);
   var c1 = pmReadControl_(ss);
   var slot = c1.active_slot;

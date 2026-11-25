@@ -37,6 +37,12 @@ rakumoワークフローの製品マスター「新規登録」「変更申請�
 - `LOOKUP_REFRESH_ENABLED=true` のときだけ LookupData REFRESH を呼ぶ。完了判定は rakumo 側の値だけで行う（REFRESH前より `lastRefreshed` が新しい・`isBuilding` なし・`rowCount` と列名が一致）。400（更新中）は次回に再要求。30分以上終わらなければエラー。
 - 状態は管理用ブックの `公開状態` タブ（role ごと：最新／取込待ち／取込中／エラー）。両方が最新になった回に、処理台帳の「マスター反映済み」行を「完了」（lookup_status=反映済み）にする。エラーは自動では戻さない（内容を確認後、status を `取込待ち` に直すと再要求する）。
 
+### Step D（定期実行と通知）
+
+- 本番入口は `pmScheduledRun`（`WRITE_ENABLED=true` のときだけ処理）。`pmInstallTrigger` で15分ごとの時間主導トリガーを1本だけ設置、`pmRemoveTriggers` で解除。
+- 通知はマスター管理者（Script Property `NOTIFY_EMAIL`）だけ。成功時は送らない。新たに保留にした申請、新たにエラーになった公開先、例外停止（同じ内容は24時間に1回まで、正常に戻ると解除）。`pmSendTestMail` で送信テスト。
+- F-2Rの公開切替と読取が重なって control が変わった場合は、10秒待って最大3回まで読み直す。
+
 ## 構成
 
 | パス | 内容 |

@@ -32,7 +32,7 @@ run('他世代の行が混在したら中断', b => { const f = tab(b, 'flows');
 run('読取中にcontrolが変わったら中断', b => {
   const c = b.F2R.control, gi = col(c, 'generation'); let n = 0;
   const orig = c.map(r => r.slice()); b.F2R.control = () => { n++; const x = orig.map(r => r.slice()); if (n > 1) x[1][gi] = 'changed'; return x; };
-}, (o, e) => e && /control が変わった/.test(e.message));
+}, (o, e) => e && /control が変わった|異なる世代/.test(e.message));
 run('処理台帳に登録済みのFlowは対象外', b => { b.MASTER['処理台帳'] = [['flow_id'], ['text:6521132406472704']]; },
   o => !res(o, 'SMSC00002') && o.judged.excluded.some(e => e[0].application_number === 'SMSC00002' && /処理台帳/.test(e[1])));
 run('status 2→5 でも台帳未登録なら1回だけ候補', b => setFlow(b, 'SMSC00002', 'status', '5'), o => res(o, 'SMSC00002').decision === '反映');

@@ -56,9 +56,10 @@ function pmApplyRun_(props) {
     });
     // Step D：公開ファイルの再生成と rakumo 再取込（設定があるときだけ）
     var sp = PropertiesService.getScriptProperties();
-    if (sp.getProperty(PM_RAKUMO.LOOKUP_PROPS.active) && sp.getProperty(PM_RAKUMO.LOOKUP_PROPS.inactive)) pmPublishRun_(props, book, log);
+    var pub = null;
+    if (sp.getProperty(PM_RAKUMO.LOOKUP_PROPS.active) && sp.getProperty(PM_RAKUMO.LOOKUP_PROPS.inactive)) pub = pmPublishRun_(props, book, log);
     else log.push('公開ファイルの設定（LOOKUP_*_SPREADSHEET_ID）がないため公開は行わない');
-    return { log: log, judged: judged };
+    return { log: log, judged: judged, publishErrors: pub ? pub.newErrors : [] };
   } finally {
     lock.releaseLock();
   }

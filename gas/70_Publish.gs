@@ -79,6 +79,11 @@ function pmPublishRun_(props, book, log) {
     else if (noError && L.lookup_status !== 'ファイル更新済み') { pmLedgerUpdate_(ledger, L._row, { lookup_status: 'ファイル更新済み' }); }
   });
   if (n) log.push('処理台帳: ' + n + '件を完了にしました');
+  // 今回の実行で新たにエラーになった公開先（通知用）
+  var before = JSON.parse(state.loaded || '{}');
+  state.newErrors = Object.keys(PM_PUB.ROLES).filter(function (r) {
+    return pmPubGet_(state, r).status === PM_PUB.ST.ERROR && !(before[r] && before[r].status === PM_PUB.ST.ERROR);
+  }).map(function (r) { return r + ': ' + pmPubGet_(state, r).note; });
   pmPubSave_(state);
   return state;
 }
