@@ -53,11 +53,74 @@ var PMV = (function () {
     cols.unshift({ key: 'hist', name: '履歴' });
     return cols;
   }
-  return { norm: norm, filter: filter, sort: sort, options: options, columnsFor: columnsFor };
+  /** 列幅（px）。保存値が無い列は既定値、範囲外は最小〜最大に収める */
+  var WIDTH = { min: 48, max: 1200, def: 120 };
+  function widthsFor(cols, saved) {
+    return cols.map(function (c) {
+      var w = Number(saved && saved[String(c.key)]);
+      if (!isFinite(w) || w <= 0) w = WIDTH.def;
+      return Math.min(WIDTH.max, Math.max(WIDTH.min, Math.round(w)));
+    });
+  }
+  return { norm: norm, filter: filter, sort: sort, options: options, columnsFor: columnsFor, widthsFor: widthsFor, WIDTH: WIDTH };
 })();
 
 if (typeof document !== 'undefined') (function () {
-  var data = null, tab = 'active', sortCol = null, sortDir = 'asc', seq = 0, open = {};
+  var data = null, tab = 'active', sortCol = null, sortDir = 'asc', seq = 0, open = {}, cols = [];
+  /* 列幅はタブごとに、この閲覧者のブラウザにだけ保存する（保存できない環境では今回の表示だけ） */
+  var WKEY = 'pmv.widths.v1', widths = {};
+  try { widths = JSON.parse(window.localStorage.getItem(WKEY) || '{}') || {}; } catch (e) { widths = {}; }
+  function saveWidths() { try { window.localStorage.setItem(WKEY, JSON.stringify(widths)); } catch (e) { /* 保存できなくても表示は続ける */ } }
+
+  /** 保存済みの幅を <colgroup> に当てる。未設定のタブは自動幅 */
+  function applyWidths() {
+    var table = el('product-table'), saved = widths[tab], cg = el('cols');
+    cg.replaceChildren();
+    if (!saved) { table.classList.remove('fixed'); table.style.width = ''; cols.forEach(function () { cg.append(node('col')); }); el('reset-widths').hidden = true; return; }
+    var ws = PMV.widthsFor(cols, saved), total = 0;
+    ws.forEach(function (w) { var c = node('col'); c.style.width = w + 'px'; cg.append(c); total += w; });
+    table.classList.add('fixed'); table.style.width = total + 'px';
+    el('reset-widths').hidden = false;
+  }
+  /** 幅の調整を始めるとき、今の見た目の幅をそのタブの初期値として取り込む */
+  function ensureWidths() {
+    if (widths[tab]) return;
+    var ths = el('head-row').children, w = {};
+    cols.forEach(function (c, i) { w[String(c.key)] = Math.round(ths[i].getBoundingClientRect().width); });
+    widths[tab] = w;
+  }
+  function setWidth(key, px) {
+    ensureWidths();
+    widths[tab][String(key)] = Math.min(PMV.WIDTH.max, Math.max(PMV.WIDTH.min, Math.round(px)));
+    applyWidths();
+  }
+  function resetWidths() { delete widths[tab]; saveWidths(); applyWidths(); }
+
+  function resizeHandle(c) {
+    var h = node('span', undefined, 'col-resize');
+    h.tabIndex = 0; h.title = 'ドラッグで幅を変更（ダブルクリックで元に戻す）';
+    h.setAttribute('role', 'separator'); h.setAttribute('aria-orientation', 'vertical'); h.setAttribute('aria-label', c.name + 'の列幅');
+    h.addEventListener('click', function (e) { e.stopPropagation(); });
+    h.addEventListener('dblclick', function (e) { e.stopPropagation(); resetWidths(); });
+    h.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      ensureWidths();
+      var start = e.clientX, base = widths[tab][String(c.key)];
+      h.setPointerCapture(e.pointerId); document.body.classList.add('resizing');
+      function move(ev) { setWidth(c.key, base + ev.clientX - start); }
+      function up() {
+        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+        document.body.classList.remove('resizing'); saveWidths();
+      }
+      h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+    });
+    h.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' ? 16 : e.key === 'ArrowLeft' ? -16 : 0; if (!d) return;
+      e.preventDefault(); ensureWidths(); setWidth(c.key, widths[tab][String(c.key)] + d); saveWidths();
+    });
+    return h;
+  }
   function el(id) { return document.getElementById(id); }
   function node(tag, text, cls) { var n = document.createElement(tag); if (text !== undefined) n.textContent = String(text); if (cls) n.className = cls; return n; }
   function message(t) { el('message').textContent = t || ''; }
@@ -81,7 +144,7 @@ if (typeof document !== 'undefined') (function () {
         else { sortCol = c.key; sortDir = 'asc'; }
         render();
       });
-      th.append(b); tr.append(th);
+      th.append(b, resizeHandle(c)); tr.append(th);
     });
   }
 
@@ -100,9 +163,9 @@ if (typeof document !== 'undefined') (function () {
       b.addEventListener('click', function () { open[id] = !open[id]; render(); });
       td.append(b);
     } else if (c.key === 'reason') {
-      td.textContent = row.reason; td.className = 'reason';
+      td.textContent = row.reason; td.title = row.reason; td.className = 'reason';
     } else {
-      td.textContent = row.v[c.key];
+      td.textContent = row.v[c.key]; td.title = row.v[c.key];
       if (c.key === 1 || c.key === 3 || c.key === 7 || c.key === 8) td.className = 'mono';
     }
     return td;
@@ -136,9 +199,10 @@ if (typeof document !== 'undefined') (function () {
 
   function render() {
     if (!data) return;
-    var cols = PMV.columnsFor(tab, data);
+    cols = PMV.columnsFor(tab, data);
     if (sortCol !== null && !cols.some(function (c) { return c.key === sortCol; })) { sortCol = null; sortDir = 'asc'; }
     renderHead(cols);
+    applyWidths();
     var total = PMV.filter(data.rows, tab, '', {}).length;
     var list = PMV.sort(PMV.filter(data.rows, tab, el('q').value, filters()), sortCol, sortDir);
     var body = el('body'), frag = document.createDocumentFragment();
@@ -198,6 +262,7 @@ if (typeof document !== 'undefined') (function () {
   el('filters').addEventListener('submit', function (e) { e.preventDefault(); render(); });
   el('clear').addEventListener('click', function () { el('q').value = ''; ['f-status', 'f-category', 'f-destination'].forEach(function (id) { el(id).value = ''; }); render(); });
   el('reload').addEventListener('click', load);
+  el('reset-widths').addEventListener('click', resetWidths);
   selectTab('active');
   load();
 })();

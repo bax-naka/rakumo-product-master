@@ -33,10 +33,11 @@
         <label>提供先<select id="f-destination"><option value="">すべて</option></select></label>
         <button type="button" id="clear">クリア</button>
       </form>
-      <p class="result-line"><span id="result-count"></span><span id="message" role="status"></span></p>
+      <p class="result-line"><span id="result-count"></span><span id="message" role="status"></span><button type="button" id="reset-widths" class="link" hidden>列幅を元に戻す</button></p>
       <details id="warnings" hidden><summary>データの注意 <span id="warning-count"></span></summary><ul id="warning-list"></ul></details>
       <div class="scroll" id="table-wrap">
         <table id="product-table" aria-labelledby="tab-active">
+          <colgroup id="cols"></colgroup>
           <thead><tr id="head-row"></tr></thead>
           <tbody id="body"></tbody>
         </table>

@@ -22,12 +22,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 .count{display:inline-block;min-width:2.2em;padding:0 6px;margin-left:4px;border-radius:10px;background:#eef2f7;font-size:12px;font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
 .tabs button[aria-selected=true] .count{background:#dce8f7}
 
-.result-line{display:flex;gap:16px;font-size:13px;color:#516578;margin:12px 0 8px}
+.result-line{display:flex;gap:16px;align-items:center;font-size:13px;color:#516578;margin:12px 0 8px}
+button.link{margin-left:auto;padding:2px 8px;font-size:13px;background:transparent;border:0;color:#174a8b;text-decoration:underline}
 #message{color:#8a5300}
 #warnings{margin:0 0 12px;font-size:13px;background:#fff3cd;padding:6px 10px;border-radius:4px}#warnings summary{cursor:pointer;font-weight:600}
 
 /* 表（見出しはスクロールしても固定） */
-.scroll{overflow:auto;max-height:calc(100vh - 300px);min-height:240px;border:1px solid #dce3ed;border-radius:4px}
+.scroll{overflow:auto;max-height:calc(100vh - 380px);min-height:240px;border:1px solid #dce3ed;border-radius:4px}
 table{width:100%;border-collapse:separate;border-spacing:0}
 th,td{text-align:left;padding:8px 10px;vertical-align:top;border-bottom:1px solid #dce3ed;white-space:nowrap}
 th{background:#eef2f7;position:sticky;top:0;z-index:1}
@@ -38,6 +39,18 @@ tbody tr:hover>td{background:#f7f9fc}
 td.mono{font-variant-numeric:tabular-nums}
 td.reason{white-space:pre-wrap;min-width:200px;max-width:420px;overflow-wrap:anywhere}
 tr.inactive>td{color:#6b7a8c}
+
+/* 列幅の調整（見出しの右端をドラッグ。矢印キーでも可） */
+.col-resize{position:absolute;top:0;right:0;width:8px;height:100%;cursor:col-resize;z-index:2;touch-action:none}
+.col-resize::after{content:'';position:absolute;top:25%;bottom:25%;right:0;width:1px;background:#c3cedb}
+.col-resize:hover::after,.col-resize:focus-visible::after{background:#123356;width:2px}
+.col-resize:focus-visible{outline:none}
+body.resizing{cursor:col-resize;user-select:none}
+table.fixed{table-layout:fixed}
+table.fixed th,table.fixed td{overflow:hidden;text-overflow:ellipsis}
+table.fixed th button{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+table.fixed td.reason{min-width:0;max-width:none;text-overflow:clip}
+table.fixed tr.detail>td{overflow:visible}
 .empty{padding:24px;text-align:center;color:#516578}
 td.muted{color:#9aa9ba}
 .hist-btn{padding:2px 10px;font-size:13px}
@@ -63,6 +76,6 @@ ul.changes{margin:0;padding:0;list-style:none}ul.changes li{margin:2px 0}
 .state{display:inline-block;padding:0 8px;border-radius:4px;font-size:13px}
 .state-active{background:#e6f4dc;color:#2f5d12}.state-inactive{background:#eceff3;color:#4a5563}.state-other{background:#fde2e1;color:#8b1d18}
 
-@media(max-width:700px){header,main{padding:12px}section{padding:12px}.scroll{max-height:none}th{position:static}}
+@media(max-width:700px){header,main{padding:12px}section{padding:12px}.scroll{max-height:none}th{position:relative}}
 [hidden]{display:none!important}
 </style>

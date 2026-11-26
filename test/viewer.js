@@ -160,5 +160,12 @@ t('列構成: 有効=9列 / 削除=+無効理由 / 全件=+管理状態+無効�
     c('all', true)[0] === '履歴' && c('all', true).slice(-2).join() === '管理状態,無効理由';
 });
 
+t('列幅: 保存値を使い、無い列は既定、範囲外は最小〜最大に収める', () => {
+  const cols = [{ key: 'hist' }, { key: 0 }, { key: 'reason' }, { key: 1 }];
+  const w = P.widthsFor(cols, { hist: 60, '0': 10, reason: 99999, x: 5 });
+  return JSON.stringify(w) === JSON.stringify([60, P.WIDTH.min, P.WIDTH.max, P.WIDTH.def]);
+});
+t('列幅: 保存値が壊れていても既定値で表示する', () => JSON.stringify(P.widthsFor([{ key: 0 }, { key: 1 }], { '0': 'abc', '1': -3 })) === JSON.stringify([120, 120]));
+
 console.log(`\nviewer: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
