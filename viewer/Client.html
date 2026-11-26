@@ -25,7 +25,10 @@ var PMV = (function () {
     return rows.filter(function (r) { return inTab(r, tab) && matches(r, ts, f || {}); });
   }
   /** 値の取り出し（列: 数値=表示列, 'state'=管理状態, 'reason'=無効理由） */
-  function cell(row, col) { return col === 'state' ? row.s : col === 'reason' ? row.reason : row.v[col]; }
+  function cell(row, col) {
+    if (col === 'hist') return row.h && row.h.length ? String(row.h.length) : '';
+    return col === 'state' ? row.s : col === 'reason' ? row.reason : row.v[col];
+  }
   /** 数字を数値として並べる自然順。空欄は常に末尾。同順位は元の並び（管理マスターの行順）を保つ */
   function sort(rows, col, dir) {
     if (col === null || col === undefined) return rows.slice();
@@ -47,13 +50,14 @@ var PMV = (function () {
     var cols = data.columns.map(function (name, i) { return { key: i, name: name }; });
     if (tab === 'all') cols.push({ key: 'state', name: '管理状態' });
     if (data.showReason && tab !== 'active') cols.push({ key: 'reason', name: '無効理由' });
+    cols.unshift({ key: 'hist', name: '履歴' });
     return cols;
   }
   return { norm: norm, filter: filter, sort: sort, options: options, columnsFor: columnsFor };
 })();
 
 if (typeof document !== 'undefined') (function () {
-  var data = null, tab = 'active', sortCol = null, sortDir = 'asc', seq = 0;
+  var data = null, tab = 'active', sortCol = null, sortDir = 'asc', seq = 0, open = {};
   function el(id) { return document.getElementById(id); }
   function node(tag, text, cls) { var n = document.createElement(tag); if (text !== undefined) n.textContent = String(text); if (cls) n.className = cls; return n; }
   function message(t) { el('message').textContent = t || ''; }
@@ -88,6 +92,13 @@ if (typeof document !== 'undefined') (function () {
       if (v) td.append(node('span', v, 'badge ' + (/^（未定義/.test(v) ? 'st-x' : 'st-' + row.code)));
     } else if (c.key === 'state') {
       td.append(node('span', row.s || '（空）', 'state ' + (row.s === '有効' ? 'state-active' : row.s === '無効' ? 'state-inactive' : 'state-other')));
+    } else if (c.key === 'hist') {
+      var id = row.v[7], n = row.h ? row.h.length : 0;
+      if (!n) { td.textContent = '—'; td.className = 'muted'; return td; }
+      var b = node('button', (open[id] ? '閉じる' : n + '件'), 'hist-btn'); b.type = 'button';
+      b.setAttribute('aria-expanded', open[id] ? 'true' : 'false'); b.title = id + ' の変更履歴';
+      b.addEventListener('click', function () { open[id] = !open[id]; render(); });
+      td.append(b);
     } else if (c.key === 'reason') {
       td.textContent = row.reason; td.className = 'reason';
     } else {
@@ -95,6 +106,32 @@ if (typeof document !== 'undefined') (function () {
       if (c.key === 1 || c.key === 3 || c.key === 7 || c.key === 8) td.className = 'mono';
     }
     return td;
+  }
+
+  /** 変更履歴（新しい順）：申請番号・決裁日時・区分・変わった項目 */
+  function historyRow(row, span) {
+    var tr = node('tr', undefined, 'detail'), td = node('td'); td.colSpan = span;
+    var t = node('table', undefined, 'history'), head = node('tr');
+    ['申請番号', '決裁日時（JST）', '区分', '変更内容'].forEach(function (h) { var th = node('th', h); th.scope = 'col'; head.append(th); });
+    var thead = node('thead'); thead.append(head); var body = node('tbody');
+    row.h.forEach(function (h) {
+      var r = node('tr'); r.append(node('td', h.no), node('td', h.at || '—'), node('td', h.kind));
+      var c = node('td'), ul = node('ul', undefined, 'changes');
+      if (!h.changes.length) ul.append(node('li', '（表示項目の変更なし）'));
+      h.changes.forEach(function (x) {
+        var li = node('li'); li.append(node('span', x[0], 'chg-col'));
+        if (h.kind === '新規登録') li.append(node('span', x[2] || '（空）', 'chg-after'));
+        else li.append(node('span', x[1] || '（空）', 'chg-before'), node('span', '→', 'chg-arrow'), node('span', x[2] || '（空）', 'chg-after'));
+        ul.append(li);
+      });
+      c.append(ul); r.append(c); body.append(r);
+    });
+    t.append(thead, body);
+    var inner = node('div', undefined, 'detail-inner');
+    inner.append(node('p', row.v[7] + '　' + row.v[0] + ' の変更履歴（自動反映の開始以降）', 'detail-title'), t);
+    td.append(inner);
+    tr.append(td);
+    return tr;
   }
 
   function render() {
@@ -109,6 +146,7 @@ if (typeof document !== 'undefined') (function () {
       var tr = node('tr', undefined, r.s === '無効' ? 'inactive' : '');
       cols.forEach(function (c) { tr.append(cellNode(r, c)); });
       frag.append(tr);
+      if (open[r.v[7]] && r.h && r.h.length) frag.append(historyRow(r, cols.length));
     });
     body.replaceChildren(frag);
     el('empty').hidden = list.length > 0;

@@ -6,18 +6,22 @@ let pass = 0, fail = 0;
 function t(name, fn) { let ok, msg = ''; try { ok = fn(); } catch (e) { ok = false; msg = e.message; } console.log((ok ? 'PASS ' : 'FAIL ') + name + (msg ? ' / ' + msg : '')); ok ? pass++ : fail++; }
 const VIEWER = path.join(__dirname, '..', 'viewer');
 const src = (f) => fs.readFileSync(path.join(VIEWER, f), 'utf8');
+const P11 = { '型番': 'BB-IOLGW8', '商品CD': '181639', '製品ステータス': '10', '分類コード': '221', '大分類': '2', '提供先': '2', '顧客伺い': '1', '管理コード': 'PD00011', 'U番号': '', '管理状態': '有効' };
+const P11_OLD = Object.assign({}, P11, { '製品ステータス': '4', '商品CD': '18163' });
+const P11_OLDER = Object.assign({}, P11_OLD, { '型番': 'BB-IOLGW8 ', '製品ステータス': '3' });
+const J = (o) => JSON.stringify(o);
 const LEDGER = [
-  ['flow_id', 'application_number', 'stage', 'updated_at'],
-  ['text:1', 'SMSA00001', '保留', '2026-11-25T09:00:00+09:00'],
-  ['text:2', 'SMSA00002', '完了', '2026-11-25T17:53:10+09:00'],
-  ['text:3', 'SMSC00002', '完了', '2026-11-24T11:42:00+09:00'],
-];
-function books(withLedger = true) {
+  ['flow_id', 'application_number', 'form_key', 'status', 'decided_at', 'stage', 'decision', 'management_id', 'reasons', 'before_json', 'after_json', 'updated_at'],
+  ['text:1', 'SMSA00001', 'new', '2', '2026-11-20T08:38:00Z', '保留', '保留', '', '型番が既存と重複', '', '', '2026-11-25T09:00:00+09:00'],
+  ['text:2', 'SMSC00002', 'change', '5', '2026-11-25T08:53:00Z', '完了', '反映', 'PD00011', '', J(P11_OLD), J(P11), '2026-11-25T17:53:10+09:00'],
+  ['text:3', 'SMSC00001', 'change', '2', '2026-11-20T08:41:00Z', 'マスター反映済み', '反映', 'PD00011', '', J(P11_OLDER), J(P11_OLD), '2026-11-24T11:42:00+09:00'],
+  ['text:4', 'SMSC00009', 'change', '2', '2026-11-21T00:00:00Z', '保留', '保留', 'PD00012', '現状値が不一致', '', '', '2026-11-24T11:42:00+09:00'],
+];function books(withLedger = true) {
   const m = clone(require('../fixtures/master.json'));
   if (withLedger) m['処理台帳'] = clone(LEDGER);
   return { MASTER: m };
 }
-const PROPS = () => ({ MASTER_SPREADSHEET_ID: 'MASTER', ALLOWED_DOMAIN: 'example.co.jp' });
+const PROPS = () => ({ MASTER_SPREADSHEET_ID: 'MASTER', ALLOWED_DOMAIN: 'example.co.jp', ALLOWED_EMAILS: 'Partner.One@sub.example.net, two@other.example.org' });
 function viewer(b, props, email = 'user@example.co.jp') {
   const html = { evaluated: 0 };
   const extra = {
@@ -76,7 +80,29 @@ t('必須列が無いと読み込みエラー（中身は利用者に見せな�
   const r = viewer(b, PROPS()).vmLoad(); return r.ok === false && !/型番/.test(r.error);
 });
 
+// 変更履歴
+const h11 = d1.rows.find(r => r.v[7] === 'PD00011').h;
+t('履歴: 反映済み（完了・マスター反映済み）だけ、新しい順', () => h11.length === 2 && h11[0].no === 'SMSC00002' && h11[1].no === 'SMSC00001');
+t('履歴: 決裁日時はJST、区分は 変更', () => h11[0].at === '2026/11/25 17:53' && h11[0].kind === '変更');
+t('履歴: 差分は表示値（コード→公開表示）で変わった列だけ', () => JSON.stringify(h11[0].changes) === JSON.stringify([['商品CD', '18163', '181639'], ['製品ステータス', '4:量産中', '10:終了']]));
+t('履歴: 正規化して同じ値（前後空白だけの違い）は差分にしない', () => JSON.stringify(h11[1].changes) === JSON.stringify([['製品ステータス', '3:開発中', '4:量産中']]));
+t('履歴: 保留の行は出さない', () => d1.rows.find(r => r.v[7] === 'PD00012').h.length === 0);
+t('履歴: 新規登録は変更前を空として全項目を出す', () => {
+  const b = books(); b.MASTER['処理台帳'].push(['text:5', 'SMSA00003', 'new', '5', '2026-11-25T08:51:00Z', '完了', '反映', 'PD00012', '', '',
+    J({ '型番': 'B-MKY36', '商品CD': '25447', '製品ステータス': '5', '分類コード': '121', '大分類': '1', '提供先': '2', '顧客伺い': '1', '管理コード': 'PD00012', 'U番号': '', '管理状態': '有効' }), '']);
+  const h = viewer(b, PROPS()).vmLoad().data.rows.find(r => r.v[7] === 'PD00012').h;
+  return h.length === 1 && h[0].kind === '新規登録' && h[0].changes.some(c => c[0] === '大分類' && c[1] === '' && c[2] === '1:IC製品') && h[0].changes.some(c => c[0] === '管理状態' && c[2] === '有効');
+});
+t('履歴: 壊れたJSONの行は飛ばして警告', () => {
+  const b = books(); b.MASTER['処理台帳'][2][10] = '{broken';
+  const d = viewer(b, PROPS()).vmLoad().data;
+  return d.rows.find(r => r.v[7] === 'PD00011').h.length === 1 && d.warnings.some(w => /SMSC00002/.test(w));
+});
+
 // 権限
+t('個別許可のアドレスは通す（大小文字を区別しない）', () => viewer(books(), PROPS(), 'partner.one@SUB.example.net').vmLoad().ok === true);
+t('個別許可と同じドメインの別アドレスは拒否', () => viewer(books(), PROPS(), 'someone@sub.example.net').vmLoad().ok === false);
+t('ALLOWED_EMAILS に不正な値があれば全体を止める', () => viewer(books(), Object.assign(PROPS(), { ALLOWED_EMAILS: 'ok@example.net, broken' })).vmLoad().ok === false);
 t('他ドメインは拒否', () => viewer(books(), PROPS(), 'user@evil.example').vmLoad().ok === false);
 t('似たドメイン（サブドメイン）も拒否', () => viewer(books(), PROPS(), 'user@x.example.co.jp').vmLoad().ok === false);
 t('メールが取れない（空）なら拒否', () => viewer(books(), PROPS(), '').vmLoad().ok === false);
@@ -127,9 +153,11 @@ t('並べ替え: 自然順・空欄は末尾・同値は元順', () => {
   const a = P.sort(rows, 0, 'asc').map(r => r.v[0]).join(), d = P.sort(rows, 0, 'desc').map(r => r.v[0]).join();
   return a === 'B9,b9,B10,' && d === 'B10,B9,b9,';
 });
-t('列構成: 有効=9列 / 削除=+無効理由 / 全件=+管理状態+無効理由', () => {
-  const k = (tab, show) => P.columnsFor(tab, { columns: d1.columns, showReason: show }).map(c => c.name).length;
-  return k('active', true) === 9 && k('inactive', true) === 10 && k('all', true) === 11 && k('inactive', false) === 9 && k('all', false) === 10;
+t('列構成: 有効=9列 / 削除=+無効理由 / 全件=+管理状態+無効理由（いずれも先頭に履歴）', () => {
+  const c = (tab, show) => P.columnsFor(tab, { columns: d1.columns, showReason: show }).map(c => c.name);
+  const k = (tab, show) => c(tab, show).length;
+  return k('active', true) === 10 && k('inactive', true) === 11 && k('all', true) === 12 && k('inactive', false) === 10 && k('all', false) === 11 &&
+    c('all', true)[0] === '履歴' && c('all', true).slice(-2).join() === '管理状態,無効理由';
 });
 
 console.log(`\nviewer: ${pass} passed, ${fail} failed`);

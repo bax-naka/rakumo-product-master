@@ -10,11 +10,12 @@
  * Script Properties
  *   MASTER_SPREADSHEET_ID  管理用ブックのID（必須）
  *   ALLOWED_DOMAIN         閲覧を許すメールのドメイン（必須。例: example.co.jp）
+ *   ALLOWED_EMAILS         ドメイン以外に閲覧を許すメールアドレス（任意。カンマ・空白・改行区切り）
  *   SHOW_INACTIVE_REASON   "false" のとき無効理由を返さない（既定は表示）
  */
 var VM = {
   TITLE: '製品マスター',
-  PROP: { MASTER_ID: 'MASTER_SPREADSHEET_ID', DOMAIN: 'ALLOWED_DOMAIN', SHOW_REASON: 'SHOW_INACTIVE_REASON' },
+  PROP: { MASTER_ID: 'MASTER_SPREADSHEET_ID', DOMAIN: 'ALLOWED_DOMAIN', EMAILS: 'ALLOWED_EMAILS', SHOW_REASON: 'SHOW_INACTIVE_REASON' },
   TAB: { master: '管理マスター', status: 'ステータス対応', category: '区分対応', ledger: '処理台帳' },
   // rakumoのルックアップ（公開ファイル）と同じ9列・同じ順
   COLUMNS: ['型番', '商品CD', '製品ステータス', '分類コード', '大分類', '提供先', '顧客伺い', '管理コード', 'U番号'],
@@ -23,7 +24,10 @@ var VM = {
   CODE_COLUMNS: { '製品ステータス': 'status', '大分類': 'category', '提供先': 'destination', '顧客伺い': 'customer' },
   CATEGORY_KEY: { '大分類': 'category', '提供先': 'destination', '顧客伺い': 'customer' },
   ACTIVE: '有効',
-  INACTIVE: '無効'
+  INACTIVE: '無効',
+  // 変更履歴：処理台帳で管理マスターへ反映済みの行だけ
+  HISTORY_STAGES: ['完了', 'マスター反映済み'],
+  HISTORY_KIND: { 'new': '新規登録', 'change': '変更', 'delete': '削除' }
 };
 
 function doGet() {
@@ -76,15 +80,24 @@ function vmSettings_() {
   if (domain.length > 253 || labels.length < 2 ||
       labels.some(function (l) { return !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l); })) throw new Error('ALLOWED_DOMAIN が不正');
   var showReason = String(p.getProperty(VM.PROP.SHOW_REASON) || '').trim().toLowerCase() !== 'false';
-  return { masterId: masterId, domain: domain, showReason: showReason };
+  var emails = String(p.getProperty(VM.PROP.EMAILS) || '').split(/[\s,;]+/).map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean);
+  emails.forEach(function (x) { if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)) throw new Error('ALLOWED_EMAILS に不正なアドレス: ' + x); });
+  return { masterId: masterId, domain: domain, emails: emails, showReason: showReason };
 }
 
-/** 社内ドメインのアカウントだけ通す（Webアプリのアクセス設定に加えた二重の確認） */
+/**
+ * 許可ドメインのアカウントと、個別に許可したアドレスだけ通す。
+ * Webアプリのアクセス設定（組織内）だけでは同じGWS組織の別会社も入れるため、ここで絞る。
+ */
 function vmAuthorize_(cfg) {
   var email = Session.getActiveUser().getEmail();
   if (typeof email !== 'string' || !email || email.length > 254 || /\s/.test(email)) throw new Error('ACCESS_DENIED');
   var parts = email.split('@');
-  if (parts.length !== 2 || !parts[0] || parts[0].length > 64 || parts[1].toLowerCase() !== cfg.domain) throw new Error('ACCESS_DENIED');
+  if (parts.length !== 2 || !parts[0] || parts[0].length > 64) throw new Error('ACCESS_DENIED');
+  var lower = email.toLowerCase();
+  if (parts[1].toLowerCase() === cfg.domain) return;
+  if ((cfg.emails || []).indexOf(lower) >= 0) return;
+  throw new Error('ACCESS_DENIED');
 }
 
 function vmQuote_(name) { return "'" + String(name).replace(/'/g, "''") + "'"; }
@@ -158,6 +171,52 @@ function vmLastApplied_(rows) {
   return best === null ? '' : vmJst_(best);
 }
 
+/** 管理マスターの値（内部コード）→ 表示値 */
+function vmDisplay_(codes, col, v) {
+  v = String(v == null ? '' : v).trim();
+  var key = VM.CODE_COLUMNS[col];
+  if (key && v !== '') return codes[key][v] === undefined ? '（未定義コード ' + v + '）' : codes[key][v];
+  return vmNorm_(v);
+}
+
+/**
+ * 処理台帳 → 管理コードごとの変更履歴（新しい順）。
+ * 反映済みの行だけを使い、before/after の差分を表示値で返す。壊れた行は飛ばして警告にする。
+ */
+function vmHistory_(rows, codes, showReason, warnings) {
+  var out = {};
+  if (!rows || !rows.length) return out;
+  var cols = VM.COLUMNS.concat([VM.STATE]).concat(showReason ? [VM.REASON] : []);
+  vmTable_(rows, VM.TAB.ledger).records.forEach(function (r) {
+    if (VM.HISTORY_STAGES.indexOf(String(r.stage || '').trim()) < 0) return;
+    var id = String(r.management_id || '').trim(), no = String(r.application_number || '').trim();
+    var before, after;
+    try { after = JSON.parse(r.after_json || 'null'); before = r.before_json ? JSON.parse(r.before_json) : null; }
+    catch (e) { warnings.push('処理台帳の変更内容を読めない: ' + no); return; }
+    if (!id || !after || typeof after !== 'object') { warnings.push('処理台帳の行が不完全: ' + no); return; }
+    var changes = [];
+    cols.forEach(function (c) {
+      if (!(c in after) && !(before && c in before)) return;
+      var b = before ? vmDisplay_(codes, c, before[c]) : '', a = vmDisplay_(codes, c, after[c]);
+      if (c === VM.REASON) { b = before ? vmNorm_(before[c]) : ''; a = vmNorm_(after[c]); }
+      if (a !== b) changes.push([c, b, a]);
+    });
+    var fk = String(r.form_key || '').trim(), t = Date.parse(String(r.decided_at || ''));
+    (out[id] = out[id] || []).push({
+      no: no,
+      at: isNaN(t) ? '' : vmJst_(t),
+      t: isNaN(t) ? 0 : t,
+      kind: VM.HISTORY_KIND[fk] || (before ? '変更' : '新規登録'),
+      changes: changes
+    });
+  });
+  Object.keys(out).forEach(function (id) {
+    out[id].sort(function (x, y) { return y.t - x.t; });
+    out[id].forEach(function (h) { delete h.t; });
+  });
+  return out;
+}
+
 /** 画面用データ。値は公開ファイルと同じ変換（コード→公開表示、取込規則で正規化） */
 function vmBuild_(books, cfg) {
   var codes = vmCodes_(books);
@@ -165,6 +224,7 @@ function vmBuild_(books, cfg) {
   var hasReason = m.header.indexOf(VM.REASON) >= 0;
   var showReason = cfg.showReason && hasReason;
   var rows = [], warnings = [], seen = {}, counts = { active: 0, inactive: 0, all: 0 };
+  var history = vmHistory_(books[VM.TAB.ledger], codes, showReason, warnings);
   m.records.forEach(function (r) {
     var id = String(r['管理コード'] || '').trim();
     if (!id) return;
@@ -184,7 +244,8 @@ function vmBuild_(books, cfg) {
       v: values,
       s: state,
       code: String(r['製品ステータス'] || '').trim(),
-      reason: showReason ? vmNorm_(r[VM.REASON]) : ''
+      reason: showReason ? vmNorm_(r[VM.REASON]) : '',
+      h: history[id] || []
     });
     counts.all++;
     if (state === VM.ACTIVE) counts.active++; else if (state === VM.INACTIVE) counts.inactive++;
