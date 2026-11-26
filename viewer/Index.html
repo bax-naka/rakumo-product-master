@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= vmInclude_('Styles') ?>
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>製品マスター</h1>
+      <div class="meta">
+        <span>最終反映（JST）: <b id="last-applied">—</b></span>
+        <span>読込（JST）: <b id="read-at">—</b></span>
+        <button type="button" id="reload">再読込</button>
+      </div>
+    </div>
+    <p class="note">rakumoの製品マスター（ルックアップ）と同じ内容を表示します。閲覧専用です。変更はワークフローの「製品マスター 新規登録／変更申請」から行ってください。</p>
+  </header>
+  <main>
+    <section>
+      <div class="tabs" role="tablist" aria-label="表示する一覧">
+        <button type="button" role="tab" id="tab-active" data-tab="active" aria-selected="true">有効 <span class="count" id="count-active">-</span></button>
+        <button type="button" role="tab" id="tab-inactive" data-tab="inactive" aria-selected="false">削除 <span class="count" id="count-inactive">-</span></button>
+        <button type="button" role="tab" id="tab-all" data-tab="all" aria-selected="false">全件（管理マスター） <span class="count" id="count-all">-</span></button>
+      </div>
+      <form id="filters" autocomplete="off">
+        <label class="grow">検索
+          <input type="search" id="q" placeholder="型番・商品CD・管理コード・U番号（空白区切りで AND）">
+        </label>
+        <label>製品ステータス<select id="f-status"><option value="">すべて</option></select></label>
+        <label>大分類<select id="f-category"><option value="">すべて</option></select></label>
+        <label>提供先<select id="f-destination"><option value="">すべて</option></select></label>
+        <button type="button" id="clear">クリア</button>
+      </form>
+      <p class="result-line"><span id="result-count"></span><span id="message" role="status"></span></p>
+      <details id="warnings" hidden><summary>データの注意 <span id="warning-count"></span></summary><ul id="warning-list"></ul></details>
+      <div class="scroll" id="table-wrap">
+        <table id="product-table" aria-labelledby="tab-active">
+          <thead><tr id="head-row"></tr></thead>
+          <tbody id="body"></tbody>
+        </table>
+        <p id="empty" class="empty" hidden>該当する製品はありません。</p>
+      </div>
+    </section>
+  </main>
+  <?!= vmInclude_('Client') ?>
+</body>
+</html>

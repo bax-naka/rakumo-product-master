@@ -1,0 +1,55 @@
+<style>
+/* F-2R ビューアの配色・文字・表を土台にし、タブ・固定見出し・ステータスのバッジだけを追加 */
+body{font:15px/1.65 system-ui,sans-serif;margin:0;color:#203047;background:#f4f6f9}
+header,main{max-width:1400px;margin:auto;padding:20px}header{padding-bottom:0}
+h1{font-size:24px;margin:0}
+.title-row{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+.meta{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13px;color:#516578}.meta b{color:#203047;font-weight:600}
+.note{font-size:13px;color:#516578;margin:8px 0 0}
+section{background:#fff;padding:20px;margin-bottom:16px;border-radius:8px}
+form{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-top:16px}label{display:flex;flex-direction:column;font-size:13px;color:#516578}
+label.grow{flex:1 1 320px}
+input,select{padding:8px;border:1px solid #9aa9ba;border-radius:4px;font:inherit;color:#203047;background:#fff}
+button{padding:8px 14px;cursor:pointer;border:1px solid #8294aa;border-radius:4px;background:#edf3fb;color:#123356;font:inherit}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #123356;outline-offset:2px}
+
+/* タブ */
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:2px solid #ccd9eb}
+.tabs button{border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;background:transparent;color:#516578;padding:8px 16px;margin-bottom:-2px}
+.tabs button[aria-selected=true]{background:#fff;color:#123356;font-weight:600;border-color:#ccd9eb;border-bottom:2px solid #fff}
+.tabs button:hover{color:#123356}
+.count{display:inline-block;min-width:2.2em;padding:0 6px;margin-left:4px;border-radius:10px;background:#eef2f7;font-size:12px;font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
+.tabs button[aria-selected=true] .count{background:#dce8f7}
+
+.result-line{display:flex;gap:16px;font-size:13px;color:#516578;margin:12px 0 8px}
+#message{color:#8a5300}
+#warnings{margin:0 0 12px;font-size:13px;background:#fff3cd;padding:6px 10px;border-radius:4px}#warnings summary{cursor:pointer;font-weight:600}
+
+/* 表（見出しはスクロールしても固定） */
+.scroll{overflow:auto;max-height:calc(100vh - 300px);min-height:240px;border:1px solid #dce3ed;border-radius:4px}
+table{width:100%;border-collapse:separate;border-spacing:0}
+th,td{text-align:left;padding:8px 10px;vertical-align:top;border-bottom:1px solid #dce3ed;white-space:nowrap}
+th{background:#eef2f7;position:sticky;top:0;z-index:1}
+th button{background:transparent;border:0;padding:0;font:inherit;font-weight:600;color:#203047;white-space:nowrap}
+th button::after{content:'';display:inline-block;width:1em;margin-left:2px;color:#8294aa}
+th[aria-sort=ascending] button::after{content:'▲'}th[aria-sort=descending] button::after{content:'▼'}
+tbody tr:hover>td{background:#f7f9fc}
+td.mono{font-variant-numeric:tabular-nums}
+td.reason{white-space:pre-wrap;min-width:200px;max-width:420px;overflow-wrap:anywhere}
+tr.inactive>td{color:#6b7a8c}
+.empty{padding:24px;text-align:center;color:#516578}
+
+/* 製品ステータスのバッジ（色だけに頼らず文字も表示） */
+.badge{display:inline-block;padding:1px 10px;border-radius:12px;font-size:13px;font-weight:600;border:1px solid transparent}
+.st-3{background:#e3eefc;color:#174a8b;border-color:#b5cdee}
+.st-4{background:#e6f4dc;color:#2f5d12;border-color:#b6d79c}
+.st-5,.st-6,.st-7,.st-8,.st-9{background:#fff3cd;color:#6b4a00;border-color:#ecd78f}
+.st-10{background:#eceff3;color:#4a5563;border-color:#cfd6df}
+.st-x{background:#fde2e1;color:#8b1d18;border-color:#f0b4b1}
+.state{display:inline-block;padding:0 8px;border-radius:4px;font-size:13px}
+.state-active{background:#e6f4dc;color:#2f5d12}.state-inactive{background:#eceff3;color:#4a5563}.state-other{background:#fde2e1;color:#8b1d18}
+
+@media(max-width:700px){header,main{padding:12px}section{padding:12px}.scroll{max-height:none}th{position:static}}
+[hidden]{display:none!important}
+</style>

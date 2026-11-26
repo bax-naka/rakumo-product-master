@@ -47,7 +47,8 @@ rakumoワークフローの製品マスター「新規登録」「変更申請�
 
 | パス | 内容 |
 |---|---|
-| `gas/` | GASソース（gas-devops Skill の `sourceDir`） |
+| `gas/` | 連携GASのソース（gas-devops Skill の `sourceDir`） |
+| `viewer/` | 製品マスター Webビューワ（読取専用の別GASプロジェクト）のソース |
 | `test/` | Node.jsでGASを再現実行する試験（SpreadsheetApp等のモック） |
 | `tools/to_json.py` | 書き出したxlsxを試験用JSONへ変換 |
 | `gas-devops.config.example.json` | gas-devops Skill用設定の雛形（実IDは入れない） |
@@ -81,6 +82,26 @@ node "<Skill>/scripts/run.mjs" push --dry-run --allow-manifest --config "<絶対
 
 計画の内容を確認・承認してから、同じコマンドに `--execute --plan "<planFile>" --approve <HASH> --exclusive` を付けて実行する。
 
+## 製品マスター Webビューワ（viewer/）
+
+管理マスターを読み取り、「有効」（最初に表示）・「削除」・「全件（管理マスター）」をタブで切り替えて表示する閲覧専用のWebアプリ。値は公開ファイル（rakumoのルックアップ）と同じ変換をかける（試験で一致を確認）。
+
+- 連携GASとは**別のGASプロジェクト**にする。Webアプリは「デプロイしたユーザーとして実行」で、`google.script.run` からは末尾が `_` でない関数を誰でも呼べるため、書込み系の関数を持つ連携GASに画面を足さない。
+- scope は `spreadsheets.readonly` と `userinfo.email` だけ。公開関数は `doGet`・`vmLoad`・`vmCheckSetup` だけ（試験で固定）。
+- 閲覧者は管理用ブックへの権限を持たなくてよい（デプロイしたユーザーの権限で読む）。
+- 検索（型番・商品CD・管理コード・U番号、全角/半角を区別しない、空白区切りでAND）、製品ステータス・大分類・提供先での絞り込み、列見出しでの並べ替え。
+- 最終反映は処理台帳で「完了」になった最新の更新時刻。
+
+Script Properties（ビューワ側）
+
+| キー | 内容 |
+|---|---|
+| `MASTER_SPREADSHEET_ID` | 管理用ブック |
+| `ALLOWED_DOMAIN` | 閲覧を許すメールのドメイン（Webアプリのアクセス設定に加えて確認する） |
+| `SHOW_INACTIVE_REASON` | `false` で無効理由を表示しない（既定は表示） |
+
+初回はエディタで `vmCheckSetup` を実行して権限を承認し、件数がログに出ることを確認してからWebアプリとして公開する。
+
 ## 試験
 
 実データ（申請内容・氏名・メールアドレス・ID）を含むため、試験データ `fixtures/` はGitに登録しない。F-2R公開Sheetsと管理用ブックをxlsxで書き出し、次で生成する。
@@ -88,6 +109,6 @@ node "<Skill>/scripts/run.mjs" push --dry-run --allow-manifest --config "<絶対
 ```text
 python3 tools/to_json.py fixtures/f2r.json <F-2R公開Sheets.xlsx>
 python3 tools/to_json.py fixtures/master.json <管理用ブック.xlsx>
-npm test          # 異常系・境界条件、書込み・復旧の試験
+npm test          # 異常系・境界条件、書込み・復旧、公開、通知、ビューワの試験
 npm run verify    # テスト台帳の期待結果との突合せ
 ```

@@ -1,0 +1,166 @@
+<script>
+/* 画面側。DOMは textContent だけで組み立てる（innerHTML は使わない） */
+var PMV = (function () {
+  var SEARCH_COLS = [0, 1, 7, 8];          // 型番・商品CD・管理コード・U番号
+  var FILTER_COLS = { status: 2, category: 4, destination: 5 };
+  var TAB_STATE = { active: '有効', inactive: '無効' };
+
+  /** サーバー側と同じ取込規則で正規化し、大文字にそろえる（全角/半角・大小を区別しない検索用） */
+  function norm(s) {
+    s = String(s == null ? '' : s).replace(/　/g, ' ');
+    s = s.replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+    s = s.replace(/[｡-ﾟ]+/g, function (m) { return m.normalize('NFKC'); });
+    return s.trim().toUpperCase();
+  }
+  function terms(q) { return norm(q).split(/\s+/).filter(Boolean); }
+  function inTab(row, tab) { return tab === 'all' || row.s === TAB_STATE[tab]; }
+  /** 検索語はすべて（AND）、どれかの検索対象列に含まれること */
+  function matches(row, ts, f) {
+    for (var k in FILTER_COLS) if (f[k] && row.v[FILTER_COLS[k]] !== f[k]) return false;
+    if (!row._key) row._key = SEARCH_COLS.map(function (i) { return norm(row.v[i]); });
+    return ts.every(function (t) { return row._key.some(function (x) { return x.indexOf(t) >= 0; }); });
+  }
+  function filter(rows, tab, q, f) {
+    var ts = terms(q);
+    return rows.filter(function (r) { return inTab(r, tab) && matches(r, ts, f || {}); });
+  }
+  /** 値の取り出し（列: 数値=表示列, 'state'=管理状態, 'reason'=無効理由） */
+  function cell(row, col) { return col === 'state' ? row.s : col === 'reason' ? row.reason : row.v[col]; }
+  /** 数字を数値として並べる自然順。空欄は常に末尾。同順位は元の並び（管理マスターの行順）を保つ */
+  function sort(rows, col, dir) {
+    if (col === null || col === undefined) return rows.slice();
+    var sign = dir === 'desc' ? -1 : 1;
+    return rows.map(function (r, i) { return { r: r, i: i }; }).sort(function (a, b) {
+      var x = cell(a.r, col) || '', y = cell(b.r, col) || '';
+      if (!x !== !y) return x ? -1 : 1;
+      var c = x.localeCompare(y, 'ja', { numeric: true, sensitivity: 'base' });
+      return c ? c * sign : a.i - b.i;
+    }).map(function (o) { return o.r; });
+  }
+  /** 絞り込み候補（値の先頭の数字順） */
+  function options(rows, key) {
+    var seen = {}, out = [];
+    rows.forEach(function (r) { var v = r.v[FILTER_COLS[key]]; if (v && !seen[v]) { seen[v] = true; out.push(v); } });
+    return out.sort(function (a, b) { return a.localeCompare(b, 'ja', { numeric: true }); });
+  }
+  function columnsFor(tab, data) {
+    var cols = data.columns.map(function (name, i) { return { key: i, name: name }; });
+    if (tab === 'all') cols.push({ key: 'state', name: '管理状態' });
+    if (data.showReason && tab !== 'active') cols.push({ key: 'reason', name: '無効理由' });
+    return cols;
+  }
+  return { norm: norm, filter: filter, sort: sort, options: options, columnsFor: columnsFor };
+})();
+
+if (typeof document !== 'undefined') (function () {
+  var data = null, tab = 'active', sortCol = null, sortDir = 'asc', seq = 0;
+  function el(id) { return document.getElementById(id); }
+  function node(tag, text, cls) { var n = document.createElement(tag); if (text !== undefined) n.textContent = String(text); if (cls) n.className = cls; return n; }
+  function message(t) { el('message').textContent = t || ''; }
+  function filters() { return { status: el('f-status').value, category: el('f-category').value, destination: el('f-destination').value }; }
+
+  function fillSelect(id, values) {
+    var s = el(id), keep = s.value;
+    while (s.options.length > 1) s.remove(1);
+    values.forEach(function (v) { var o = node('option', v); o.value = v; s.append(o); });
+    s.value = values.indexOf(keep) >= 0 ? keep : '';
+  }
+
+  function renderHead(cols) {
+    var tr = el('head-row'); tr.replaceChildren();
+    cols.forEach(function (c) {
+      var th = node('th'); th.scope = 'col';
+      if (sortCol === c.key) th.setAttribute('aria-sort', sortDir === 'asc' ? 'ascending' : 'descending');
+      var b = node('button', c.name); b.type = 'button'; b.title = c.name + 'で並べ替え';
+      b.addEventListener('click', function () {
+        if (sortCol === c.key) { if (sortDir === 'asc') sortDir = 'desc'; else { sortCol = null; sortDir = 'asc'; } }
+        else { sortCol = c.key; sortDir = 'asc'; }
+        render();
+      });
+      th.append(b); tr.append(th);
+    });
+  }
+
+  function cellNode(row, c) {
+    var td = node('td');
+    if (c.key === 2) {
+      var v = row.v[2];
+      if (v) td.append(node('span', v, 'badge ' + (/^（未定義/.test(v) ? 'st-x' : 'st-' + row.code)));
+    } else if (c.key === 'state') {
+      td.append(node('span', row.s || '（空）', 'state ' + (row.s === '有効' ? 'state-active' : row.s === '無効' ? 'state-inactive' : 'state-other')));
+    } else if (c.key === 'reason') {
+      td.textContent = row.reason; td.className = 'reason';
+    } else {
+      td.textContent = row.v[c.key];
+      if (c.key === 1 || c.key === 3 || c.key === 7 || c.key === 8) td.className = 'mono';
+    }
+    return td;
+  }
+
+  function render() {
+    if (!data) return;
+    var cols = PMV.columnsFor(tab, data);
+    if (sortCol !== null && !cols.some(function (c) { return c.key === sortCol; })) { sortCol = null; sortDir = 'asc'; }
+    renderHead(cols);
+    var total = PMV.filter(data.rows, tab, '', {}).length;
+    var list = PMV.sort(PMV.filter(data.rows, tab, el('q').value, filters()), sortCol, sortDir);
+    var body = el('body'), frag = document.createDocumentFragment();
+    list.forEach(function (r) {
+      var tr = node('tr', undefined, r.s === '無効' ? 'inactive' : '');
+      cols.forEach(function (c) { tr.append(cellNode(r, c)); });
+      frag.append(tr);
+    });
+    body.replaceChildren(frag);
+    el('empty').hidden = list.length > 0;
+    el('result-count').textContent = '表示 ' + list.length + ' / ' + total + ' 件';
+  }
+
+  function selectTab(t) {
+    tab = t;
+    document.querySelectorAll('[role=tab]').forEach(function (b) {
+      var on = b.getAttribute('data-tab') === t;
+      b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+      if (on) el('product-table').setAttribute('aria-labelledby', b.id);
+    });
+    render();
+  }
+
+  function load() {
+    var current = ++seq; message('読み込み中…'); el('reload').disabled = true;
+    google.script.run.withSuccessHandler(function (res) {
+      if (current !== seq) return; el('reload').disabled = false;
+      if (!res || !res.ok) { message(res && res.error ? res.error : '表示できません。'); return; }
+      data = res.data; message('');
+      el('last-applied').textContent = data.lastApplied || '記録なし';
+      el('read-at').textContent = data.readAt;
+      ['active', 'inactive', 'all'].forEach(function (k) { el('count-' + k).textContent = data.counts[k]; });
+      fillSelect('f-status', PMV.options(data.rows, 'status'));
+      fillSelect('f-category', PMV.options(data.rows, 'category'));
+      fillSelect('f-destination', PMV.options(data.rows, 'destination'));
+      var w = data.warnings || [];
+      el('warnings').hidden = !w.length; el('warning-count').textContent = '（' + w.length + '件）';
+      el('warning-list').replaceChildren.apply(el('warning-list'), w.map(function (x) { return node('li', x); }));
+      render();
+    }).withFailureHandler(function () {
+      if (current !== seq) return; el('reload').disabled = false;
+      message('読み込みに失敗しました。再読込してください。');
+    }).vmLoad();
+  }
+
+  document.querySelectorAll('[role=tab]').forEach(function (b, i, all) {
+    b.addEventListener('click', function () { selectTab(b.getAttribute('data-tab')); });
+    b.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (!d) return;
+      var n = all[(i + d + all.length) % all.length]; n.focus(); selectTab(n.getAttribute('data-tab')); e.preventDefault();
+    });
+  });
+  var timer = null;
+  el('q').addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(render, 120); });
+  ['f-status', 'f-category', 'f-destination'].forEach(function (id) { el(id).addEventListener('change', render); });
+  el('filters').addEventListener('submit', function (e) { e.preventDefault(); render(); });
+  el('clear').addEventListener('click', function () { el('q').value = ''; ['f-status', 'f-category', 'f-destination'].forEach(function (id) { el(id).value = ''; }); render(); });
+  el('reload').addEventListener('click', load);
+  selectTab('active');
+  load();
+})();
+</script>

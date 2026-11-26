@@ -98,8 +98,9 @@ module.exports = function load(books, props, opts = {}) {
       getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: (k) => { delete props[k]; } }),
       getUserProperties: () => { const u = opts.userProps || (opts.userProps = {}); return { getProperty: (k) => u[k] || null, setProperty: (k, v) => { u[k] = v; }, deleteProperty: (k) => { delete u[k]; } }; } },
   };
+  Object.assign(ctx, opts.extra || {});
   vm.createContext(ctx);
-  const dir = path.join(__dirname, '..', 'gas');
+  const dir = path.join(__dirname, '..', opts.dir || 'gas');
   fs.readdirSync(dir).filter(f => f.endsWith('.gs')).sort().forEach(f => vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f }));
   ctx.__stats = stats; ctx.__meta = meta;
   return ctx;

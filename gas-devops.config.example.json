@@ -6,6 +6,13 @@
       "environment": "staging",
       "deployments": {},
       "notifications": { "enabled": false }
+    },
+    "product-master-viewer": {
+      "scriptId": "REPLACE_WITH_VIEWER_SCRIPT_ID",
+      "sourceDir": "./viewer",
+      "environment": "staging",
+      "deployments": {},
+      "notifications": { "enabled": false }
     }
   }
 }
