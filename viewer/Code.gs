@@ -206,7 +206,8 @@ function vmHistory_(rows, codes, showReason, warnings) {
       no: no,
       at: isNaN(t) ? '' : vmJst_(t),
       t: isNaN(t) ? 0 : t,
-      kind: VM.HISTORY_KIND[fk] || (before ? '変更' : '新規登録'),
+      kind: fk === 'delete_restore' ? (String(after[VM.STATE] || '').trim() === VM.INACTIVE ? '削除' : '復帰')
+            : VM.HISTORY_KIND[fk] || (before ? '変更' : '新規登録'),
       changes: changes
     });
   });

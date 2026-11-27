@@ -99,6 +99,16 @@ t('履歴: 壊れたJSONの行は飛ばして警告', () => {
   return d.rows.find(r => r.v[7] === 'PD00011').h.length === 1 && d.warnings.some(w => /SMSC00002/.test(w));
 });
 
+t('履歴: 削除・復帰申請は管理状態の向きで「削除」「復帰」を表示', () => {
+  const b = books(); const L = b.MASTER['処理台帳'];
+  const P = Object.assign({}, P11, { '無効理由': '' }), D = Object.assign({}, P11, { '管理状態': '無効', '無効理由': '生産終了' });
+  L.push(['text:6', 'SMSD00001', 'delete_restore', '5', '2026-11-26T01:00:00Z', '完了', '反映', 'PD00011', '', J(P), J(D), '']);
+  L.push(['text:7', 'SMSD00002', 'delete_restore', '5', '2026-11-26T02:00:00Z', '完了', '反映', 'PD00011', '', J(D), J(P), '']);
+  const h = viewer(b, PROPS()).vmLoad().data.rows.find(r => r.v[7] === 'PD00011').h;
+  const del = h.find(x => x.no === 'SMSD00001'), res = h.find(x => x.no === 'SMSD00002');
+  return del.kind === '削除' && res.kind === '復帰' && JSON.stringify(del.changes) === JSON.stringify([['管理状態', '有効', '無効'], ['無効理由', '', '生産終了']]);
+});
+
 // 権限
 t('個別許可のアドレスは通す（大小文字を区別しない）', () => viewer(books(), PROPS(), 'partner.one@SUB.example.net').vmLoad().ok === true);
 t('個別許可と同じドメインの別アドレスは拒否', () => viewer(books(), PROPS(), 'someone@sub.example.net').vmLoad().ok === false);

@@ -48,6 +48,7 @@ function pmJudgeAll(f2r, master, opts) {
     var r = !map ? { reasons: ['項目マッピングがない: ' + c.form_key], warnings: [] }
           : c.form_key === 'new' ? pmJudgeNew_(items, map, state, master)
           : c.form_key === 'change' ? pmJudgeChange_(items, map, state, master)
+          : c.form_key === PM.DELETE_FORM_KEY ? pmJudgeDeleteRestore_(items, map, state, master)
           : { reasons: ['未対応の form_key: ' + c.form_key], warnings: [] };
     var res = { application_number: c.application_number, flow_id: c.flow_id, form_key: c.form_key, status: c.status,
                 decided_at: c.decided_at, decision: r.reasons.length ? '保留' : '反映',
@@ -136,7 +137,7 @@ function pmJudgeNew_(items, map, state, master) {
   var id = pmMgmtId_(state.nextNo);
   var after = { '型番': pmNorm(model), '商品CD': pmNorm(pc), '製品ステータス': vals.status, '分類コード': '',
                 '大分類': vals.category, '提供先': vals.destination, '顧客伺い': vals.customer,
-                '管理コード': id, 'U番号': pmNorm(unit), '管理状態': '有効' };
+                '管理コード': id, 'U番号': pmNorm(unit), '管理状態': '有効', '無効理由': '' };
   after['分類コード'] = pmClassCode_(after);
   var diff = PM.COLUMNS.map(function (c) { return { column: c, before: '', after: after[c] }; });
   return { reasons: reasons, warnings: warnings, managementId: id, before: null, after: after, diff: diff };
@@ -198,6 +199,71 @@ function pmJudgeChange_(items, map, state, master) {
   var diff = PM.COLUMNS.filter(function (c) { return after[c] !== p[c]; }).map(function (c) { return { column: c, before: p[c], after: after[c] }; });
   if (on.length && !diff.length) reasons.push('実質的な変更がない');
   if (reasons.length) return { reasons: reasons, warnings: warnings, managementId: id };
+  return { reasons: reasons, warnings: warnings, managementId: id, before: p, after: after, diff: diff };
+}
+
+/** ルックアップ項目の値 → { 列名: 値 }。未選択（項目なし・値なし）は null、解釈できなければ理由を積む */
+function pmLookupSnap_(it, reasons, label) {
+  if (!it) return null;
+  var raw = it.value_json, obj;
+  if (raw === undefined || raw === null || String(raw).trim() === '' || String(raw).trim() === 'null') return null;
+  try { obj = JSON.parse(raw); } catch (e) { reasons.push(label + ' の値を解釈できない'); return null; }
+  if (obj === null || typeof obj !== 'object' || !Array.isArray(obj.columns) || !obj.columns.length) return null;
+  var snap = {};
+  obj.columns.forEach(function (c) { snap[String(c.label)] = String(c.value == null ? '' : c.value); });
+  return snap;
+}
+
+/**
+ * 削除・復帰申請。区分（ラジオ）で使うルックアップを決め、申請時点のスナップショットと
+ * 現在の管理マスターを照合してから、管理状態と無効理由だけを変える。
+ *   削除: 有効 → 無効、無効理由 = 申請の理由
+ *   復帰: 無効 → 有効、無効理由 = 空（以前の理由は処理台帳と変更履歴に残る）
+ */
+function pmJudgeDeleteRestore_(items, map, state, master) {
+  var reasons = [], warnings = [];
+  var kind = pmGet_(items, map, 'kind', 'value', reasons, true);
+  if (kind === null) return { reasons: reasons, warnings: warnings };
+  kind = pmNorm(kind);
+  var rule = PM.DELETE_KIND[kind];
+  if (!rule) { reasons.push(PM.KEY_COLUMN.kind + ' の値が不正: "' + kind + '"'); return { reasons: reasons, warnings: warnings }; }
+  var other = kind === '削除' ? PM.DELETE_KIND['復帰'] : PM.DELETE_KIND['削除'];
+
+  var lkId = map[rule.lookup] && map[rule.lookup].lookup;
+  if (!lkId) { reasons.push('項目マッピング未定義: ' + rule.lookup + '/lookup'); return { reasons: reasons, warnings: warnings }; }
+  var snap = pmLookupSnap_(items[lkId], reasons, kind + '型番');
+  var otherId = map[other.lookup] && map[other.lookup].lookup;
+  if (otherId && pmLookupSnap_(items[otherId], [], '') !== null) reasons.push('区分「' + kind + '」と反対側のルックアップにも製品が選ばれている');
+  if (!snap) { if (!reasons.length) reasons.push(kind + '型番（ルックアップ）が選ばれていない'); return { reasons: reasons, warnings: warnings }; }
+  PM.LOOKUP_COLUMNS.forEach(function (c) { if (!(c in snap)) reasons.push('ルックアップに列がない: ' + c); });
+  if (reasons.length) return { reasons: reasons, warnings: warnings };
+
+  var id = pmNorm(snap['管理コード']);
+  // 管理コードの表示欄（ルックアップからの転記）。区分ごとの欄か共通の欄のどちらかがあれば照合する
+  ['lookup_copy_' + (kind === '削除' ? 'delete' : 'restore'), 'lookup_copy'].forEach(function (role) {
+    var cid = map.management_id && map.management_id[role], cit = cid && items[cid];
+    if (!cit) return;
+    var v = pmNorm(pmItemText_(cit, reasons, cit.item_name));
+    if (v !== '' && v !== id) reasons.push('管理コード項目とルックアップの管理コードが不一致: ' + v + ' / ' + id);
+  });
+  var p = state.products[id];
+  if (!p) { reasons.push('管理コードが管理マスターにない: ' + id); return { reasons: reasons, warnings: warnings }; }
+  if (p['管理状態'] !== rule.from) reasons.push(kind + 'できる状態ではない: 現在の管理状態=' + p['管理状態'] + '（' + kind + 'は' + rule.from + 'のときだけ）');
+  PM.LOOKUP_COLUMNS.forEach(function (c) {
+    var a = pmNorm(snap[c]), b = pmToDisplay_(master, c, p);
+    if (a !== b) reasons.push('申請時の値が管理マスターと不一致: ' + c + ' 申請="' + a + '" マスター="' + b + '"');
+  });
+  if (kind === '復帰') {
+    var dup = state.models[pmModelKey(p['型番'])];
+    if (dup && dup !== id) reasons.push('復帰すると型番が重複する: "' + p['型番'] + '"（' + dup + '）');
+  }
+  var reasonText = pmGet_(items, map, 'reason', 'value', reasons, true);
+  if (reasons.length) return { reasons: reasons, warnings: warnings, managementId: id };
+
+  var after = {}; PM.COLUMNS.forEach(function (c) { after[c] = p[c]; });
+  after['管理状態'] = rule.to;
+  after['無効理由'] = kind === '削除' ? String(reasonText).replace(/\r\n?/g, '\n').trim() : '';
+  var diff = PM.COLUMNS.filter(function (c) { return after[c] !== p[c]; }).map(function (c) { return { column: c, before: p[c], after: after[c] }; });
   return { reasons: reasons, warnings: warnings, managementId: id, before: p, after: after, diff: diff };
 }
 

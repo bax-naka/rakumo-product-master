@@ -25,12 +25,17 @@ var PM = {
     ledger: '処理台帳'
   },
   // 公開9列 + 管理状態
-  COLUMNS: ['型番', '商品CD', '製品ステータス', '分類コード', '大分類', '提供先', '顧客伺い', '管理コード', 'U番号', '管理状態'],
+  COLUMNS: ['型番', '商品CD', '製品ステータス', '分類コード', '大分類', '提供先', '顧客伺い', '管理コード', 'U番号', '管理状態', '無効理由'],
   LOOKUP_COLUMNS: ['型番', '商品CD', '製品ステータス', '分類コード', '大分類', '提供先', '顧客伺い', '管理コード', 'U番号'],
   KEY_COLUMN: {
     model: '型番', product_code: '商品CD', status: '製品ステータス', category: '大分類',
-    destination: '提供先', customer: '顧客伺い', unit: 'U番号', management_id: '管理コード', class_code: '分類コード'
+    destination: '提供先', customer: '顧客伺い', unit: 'U番号', management_id: '管理コード', class_code: '分類コード',
+    kind: '区分（削除・復帰）', reason: '理由'
   },
+  // 削除・復帰申請（form_key = delete_restore）
+  DELETE_FORM_KEY: 'delete_restore',
+  DELETE_KIND: { '削除': { lookup: 'target_delete', from: '有効', to: '無効' },
+                 '復帰': { lookup: 'target_restore', from: '無効', to: '有効' } },
   CATEGORY_KEY: { '大分類': 'category', '提供先': 'destination', '顧客伺い': 'customer' },
   EDITABLE_KEYS: ['model', 'status', 'category', 'destination', 'customer', 'product_code', 'unit'],
   CODE_KEYS: ['status', 'category', 'destination', 'customer'],
