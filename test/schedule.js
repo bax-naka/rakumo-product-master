@@ -9,7 +9,9 @@ function world(extra = {}) {
       LOOKUP_ACTIVE_SPREADSHEET_ID: 'LK_A', LOOKUP_INACTIVE_SPREADSHEET_ID: 'LK_I', NOTIFY_EMAIL: 'admin@example.com' }, extra),
     meta: { MASTER: { formats: {}, formulas: {}, hidden: {} } }, stats: { batchGet: 0, get: 0, writes: 0 }, triggers: [] };
 }
-const g = (w, fetch) => { const x = load(w.books, w.props, { meta: w.meta, stats: w.stats, triggers: w.triggers, userProps: { RAKUMO_API_KEY: 'k', RAKUMO_API_SECRET: 's' }, fetch }); x.console = { log() {} }; return x; };
+// 既定の時刻は土曜（F-2R 停止の監視時間外）。監視の試験だけ平日の時刻を与える
+const SAT = Date.parse('2026-11-21T12:00:00+09:00');
+const g = (w, fetch, now = SAT) => { const x = load(w.books, w.props, { meta: w.meta, stats: w.stats, triggers: w.triggers, userProps: { RAKUMO_API_KEY: 'k', RAKUMO_API_SECRET: 's' }, fetch }); x.console = { log() {} }; x.pmNowMs_ = () => now; return x; };
 const mails = (w) => w.stats.mails || [];
 
 t('WRITE_ENABLED未設定なら何もしない・通知しない', () => { const w = world({ WRITE_ENABLED: '' }); const before = JSON.stringify(w.books.MASTER); g(w).pmScheduledRun(); return JSON.stringify(w.books.MASTER) === before && !mails(w).length; });
@@ -36,6 +38,26 @@ const w6 = world({ LOOKUP_REFRESH_ENABLED: 'true' });
 const fetch6 = (url) => /lookup-data\?/.test(url) ? { code: 200, body: { items: [] } } : { code: 404, body: {} };
 g(w6, fetch6).pmScheduledRun(); g(w6, fetch6).pmScheduledRun();
 t('公開エラーは新たに発生した回だけ通知', () => { const m = mails(w6); return m.length === 1 && /公開エラー/.test(m[0].subject) && /active: spreadsheetIdに一致するルックアップが0件/.test(m[0].body); });
+
+// F-2R 停止の検知（fixture の最終同期は 2026-11-20T09:16:56Z = 18:16 JST）
+const LAST = Date.parse('2026-11-20T09:16:56.443728Z');
+const stale = (w) => mails(w).filter(m => /F-2R 同期停止/.test(m.subject));
+t('F-2R: 最終同期が30分以内なら通知しない', () => { const w = world(); g(w, undefined, Date.parse('2026-11-20T18:40:00+09:00')).pmScheduledRun(); return !stale(w).length && !w.props.PM_F2R_STALE; });
+t('F-2R: 平日でも監視時間外（17:30より後・9:30より前）は通知しない', () => { const w = world(); g(w, undefined, Date.parse('2026-11-20T19:00:00+09:00')).pmScheduledRun(); g(w, undefined, Date.parse('2026-11-23T09:10:00+09:00')).pmScheduledRun(); return !stale(w).length; });
+t('F-2R: 土日は通知しない', () => { const w = world(); g(w, undefined, Date.parse('2026-11-22T11:00:00+09:00')).pmScheduledRun(); return !stale(w).length; });
+const wS = world();
+g(wS, undefined, Date.parse('2026-11-23T10:00:00+09:00')).pmScheduledRun();
+g(wS, undefined, Date.parse('2026-11-23T10:15:00+09:00')).pmScheduledRun();
+g(wS, undefined, Date.parse('2026-11-24T10:00:00+09:00')).pmScheduledRun();
+t('F-2R: 平日業務時間に古ければ1通だけ通知（同じ停止は翌日も再通知しない）', () => { const m = stale(wS); return m.length === 1 && /2026\/11\/20 18:16/.test(m[0].body) && /schedule_halt\.json/.test(m[0].body) && wS.props.PM_F2R_STALE === '2026-11-20T09:16:56.443728Z'; });
+wS.books.F2R.control[1][10] = '2026-11-24T01:05:00Z';
+g(wS, undefined, Date.parse('2026-11-24T10:10:00+09:00')).pmScheduledRun();
+t('F-2R: 再開したら再開の通知を1通送り、記録を解除', () => { const r = mails(wS).filter(m => /F-2R 同期再開/.test(m.subject)); return r.length === 1 && /2026\/11\/24 10:05/.test(r[0].body) && !wS.props.PM_F2R_STALE; });
+wS.books.F2R.control[1][10] = '2026-11-24T01:05:00Z';
+g(wS, undefined, Date.parse('2026-11-24T11:00:00+09:00')).pmScheduledRun();
+t('F-2R: 再び止まったら新しい停止として通知', () => stale(wS).length === 2);
+t('F-2R: 最終同期が読めない値なら停止として通知', () => { const w = world(); w.books.F2R.control[1][10] = ''; g(w, undefined, Date.parse('2026-11-23T10:00:00+09:00')).pmScheduledRun(); return stale(w).length === 1 && /読み取れない/.test(stale(w)[0].body); });
+t('F-2R: WRITE_ENABLED でなければ確認もしない', () => { const w = world({ WRITE_ENABLED: '' }); g(w, undefined, Date.parse('2026-11-23T10:00:00+09:00')).pmScheduledRun(); return !mails(w).length; });
 
 t('トリガーは何度設置しても1本、解除で0本', () => { const w = world(); const x = g(w); x.pmInstallTrigger(); x.pmInstallTrigger(); const one = w.triggers.length === 1 && w.triggers[0].h === 'pmScheduledRun' && w.triggers[0].n === 15; x.pmRemoveTriggers(); return one && w.triggers.length === 0; });
 t('F-2Rの公開切替と1回重なっても読み直して継続', () => { const w = world(); const c = w.books.F2R.control, gi = c[0].indexOf('generation'); let n = 0; const orig = clone(c);
