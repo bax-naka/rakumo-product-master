@@ -6,7 +6,9 @@
  *   - 今回の実行で新たに「保留」と記録した申請（申請番号・理由）
  *   - 今回の実行で新たに「エラー」になった公開先（ルックアップ）
  *   - 実行が例外で止まったとき（同じ内容は24時間に1回まで。正常に戻ったら解除）
- *   - F-2R の同期が止まっているとき（平日 9:30〜17:30 に最終同期が30分より古い。止まった1回につき1通、再開したら1通）
+ *   - F-2R が「今日いったん動いてから止まった」とき（平日 9:30〜17:30、最終同期が今日で30分より古い。
+ *     止まった1回につき1通、再開したら1通）。F-2R は作業用PCで動くため、PCを起動していない日
+ *     （祝日・出張・休暇など）は最終同期が前日以前のままになるが、それは通知しない。
  * トリガーの設置・解除は pmInstallTrigger / pmRemoveTriggers を手動で実行する。
  */
 var PM_SCHED = {
@@ -38,7 +40,7 @@ function pmJstText_(ms) {
 }
 
 /**
- * F-2R の最終同期が業務時間中に古くなっていないかを見て、止まっていれば管理者へ知らせる。
+ * F-2R が今日動いていたのに止まっていれば、管理者へ知らせる。
  * 同じ停止（同じ最終同期時刻）については1通だけ。再開したら再開の通知を1通送る。
  * 読み取りに失敗してもここでは止めない（本体の読み取りで同じ失敗が通知される）。
  */
@@ -60,13 +62,15 @@ function pmCheckF2rFresh_(props, nowMs) {
   }
   var c = pmJstClock_(nowMs);
   var watching = c.day >= 1 && c.day <= 5 && c.minutes >= PM_SCHED.F2R_WATCH_FROM && c.minutes <= PM_SCHED.F2R_WATCH_TO;
-  if (!watching || alerted === lastText) return;
+  // 今日一度も同期していない（PC未起動の日）は対象外。最終同期が読めない値のときは異常として扱う
+  var ranToday = isNaN(last) || pmJstText_(last).slice(0, 10) === pmJstText_(nowMs).slice(0, 10);
+  if (!watching || !ranToday || alerted === lastText) return;
   sp.setProperty(PM_SCHED.F2R_STALE_PROP, lastText);
   pmSendMail_('F-2R 同期停止', [
-    'F-2R（rakumoワークフロー同期）の同期が止まっています。止まっている間は、申請の承認が製品マスターに反映されません。', '',
+    'F-2R（rakumoワークフロー同期）が、今日動いた後に止まっています。止まっている間は、申請の承認が製品マスターに反映されません。', '',
     '最終同期（JST）: ' + (isNaN(last) ? '読み取れない（' + lastText + '）' : pmJstText_(last) + '（' + Math.floor(ageMin) + '分前）'), '',
     '考えられる原因:',
-    '  - F-2R を動かしている PC の電源断・スリープ・ネットワーク切断',
+    '  - F-2R を動かしている PC の終了・スリープ・ネットワーク切断（意図した終了なら対応不要）',
     '  - 処理の途中停止による停止ラッチ（data/phase_f2r/schedule_halt.json）が残っている',
     '  - rakumo / Google 側の障害', '',
     '確認: タスクスケジューラ「Rakumo review F2R continuous 5m」の状態と、上記ラッチの有無。',
